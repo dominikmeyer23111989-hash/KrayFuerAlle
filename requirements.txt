@@ -1,5 +1,0 @@
-supabase
-python-dotenv
-customtkinter
-streamlit
-pandas
