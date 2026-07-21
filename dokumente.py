@@ -1,4 +1,16 @@
+import dropbox
+import streamlit as st
 from database import supabase
+
+def get_dropbox_client():
+    try:
+        token = st.secrets.get("DROPBOX_ACCESS_TOKEN")
+        if not token:
+            return None
+        return dropbox.Dropbox(token)
+    except Exception as e:
+        print(f"Fehler beim Initialisieren von Dropbox: {e}")
+        return None
 
 def get_dokumente(bereich=None):
     try:
@@ -11,31 +23,43 @@ def get_dokumente(bereich=None):
         print(f"Fehler beim Laden der Dokumente: {e}")
         return []
 
-def dokument_hochladen_storage(datei_bytes, dateiname):
+def dokument_hochladen_dropbox(datei_bytes, dateiname):
+    dbx = get_dropbox_client()
+    if not dbx:
+        return False, "Dropbox Access Token fehlt in den Streamlit Secrets!"
     try:
-        supabase.storage.from_("verein-dateien").upload(dateiname, datei_bytes, file_options={"upsert": "true"})
+        path = f"/{dateiname}"
+        dbx.files_upload(datei_bytes, path, mode=dropbox.files.WriteMode.overwrite)
+        return True, "Erfolgreich hochgeladen"
+    except Exception as e:
+        return False, f"Fehler beim Dropbox-Upload: {e}"
+
+def dokument_loeschen_dropbox(dateipfad):
+    dbx = get_dropbox_client()
+    if not dbx:
+        return False
+    try:
+        path = f"/{dateipfad}"
+        dbx.files_delete_v2(path)
         return True
     except Exception as e:
-        print(f"Fehler beim Storage-Upload: {e}")
+        print(f"Fehler beim Löschen aus Dropbox: {e}")
         return False
 
-def dokument_loeschen_storage(dateipfad):
+def datei_herunterladen_dropbox(dateipfad):
+    dbx = get_dropbox_client()
+    if not dbx:
+        return None
     try:
-        supabase.storage.from_("verein-dateien").remove([dateipfad])
-        return True
+        path = f"/{dateipfad}"
+        _, res = dbx.files_download(path)
+        return res.content
     except Exception as e:
-        print(f"Fehler beim Löschen aus Storage: {e}")
-        return False
+        print(f"Fehler beim Dropbox-Download: {e}")
+        return None
 
 def dokument_db_eintragen(daten):
     return supabase.table("dokumente").insert(daten).execute()
 
 def dokument_db_loeschen(dok_id):
     return supabase.table("dokumente").delete().eq("id", dok_id).execute()
-
-def datei_herunterladen(dateipfad):
-    try:
-        return supabase.storage.from_("verein-dateien").download(dateipfad)
-    except Exception as e:
-        print(f"Fehler beim Download: {e}")
-        return None

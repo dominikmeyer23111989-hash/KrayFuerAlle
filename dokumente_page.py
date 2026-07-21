@@ -2,15 +2,16 @@ import streamlit as st
 from datetime import datetime
 from modules.dokumente import (
     get_dokumente,
-    dokument_hochladen_storage,
-    dokument_loeschen_storage,
+    dokument_hochladen_dropbox,
+    dokument_loeschen_dropbox,
+    datei_herunterladen_dropbox,
     dokument_db_eintragen,
-    dokument_db_loeschen,
-    datei_herunterladen
+    dokument_db_loeschen
 )
 
 def show():
     st.header("📁 Vereins-Dokumente")
+    st.caption("Dateien werden sicher in deiner Dropbox gespeichert, um Supabase zu entlasten.")
     
     user_id = st.session_state.get("user_id")
     user_rolle = st.session_state.get("user_rolle", "mitglied")
@@ -29,19 +30,11 @@ def show():
         tab_upload = None
 
     # ==========================================
-    # TAB 1: ÖFFENTLICHE DOKUMENTE
+    # HELFER-FUNKTION FÜR DIE ANZEIGE & AKTIONEN
     # ==========================================
-    if not is_leitung:
-        st.subheader("Öffentliche Dokumente")
-        
-    with (tab_oeffentlich if is_leitung else st.container()):
-        if is_leitung:
-            st.subheader("Öffentliche Dokumente (für alle Mitglieder sichtbare Dateien)")
-            
-        oeffentliche_docs = get_dokumente(bereich="oeffentlich")
-        
-        if oeffentliche_docs:
-            for doc in oeffentliche_docs:
+    def dokumente_liste_rendern(docs_data, bereich_name):
+        if docs_data:
+            for doc in docs_data:
                 with st.expander(f"📄 {doc.get('titel')}"):
                     st.write(f"**Beschreibung:** {doc.get('beschreibung', 'Keine Beschreibung')}")
                     
@@ -51,67 +44,59 @@ def show():
                     
                     st.caption(f"Hochgeladen am {hochgeladen_am} von {hochgeladen_von_name}")
                     
-                    # Download-Button
+                    # Download aus Dropbox
                     dateipfad = doc.get("dateipfad")
                     if dateipfad:
-                        file_bytes = datei_herunterladen(dateipfad)
+                        file_bytes = datei_herunterladen_dropbox(dateipfad)
                         if file_bytes:
                             st.download_button(
                                 label="📥 Datei herunterladen",
                                 data=file_bytes,
                                 file_name=dateipfad.split("_", 1)[-1] if "_" in dateipfad else dateipfad,
-                                key=f"dl_oeff_{doc.get('id')}"
+                                key=f"dl_{bereich_name}_{doc.get('id')}"
                             )
+                        else:
+                            st.warning("⚠️ Datei konnte nicht aus der Dropbox geladen werden (möglicherweise wurde sie dort gelöscht).")
                             
+                    # Löschen (Nur Vorstand/Admin)
                     if is_leitung:
-                        if st.button("🗑️ Dokument löschen", key=f"del_oeff_{doc.get('id')}"):
-                            dokument_loeschen_storage(dateipfad)
+                        if st.button("🗑️ Dokument endgültig löschen", key=f"del_{bereich_name}_{doc.get('id')}", type="secondary"):
+                            # 1. Aus Dropbox löschen
+                            erfolg_dbx = dokument_loeschen_dropbox(dateipfad)
+                            # 2. Aus Supabase DB löschen
                             dokument_db_loeschen(doc.get("id"))
-                            st.success("Dokument gelöscht!")
+                            
+                            if erfolg_dbx:
+                                st.success("Dokument erfolgreich aus Dropbox und Datenbank gelöscht!")
+                            else:
+                                st.warning("Eintrag aus Datenbank gelöscht, aber Datei war evtl. nicht mehr in Dropbox.")
                             st.rerun()
         else:
-            st.info("Keine öffentlichen Dokumente vorhanden.")
+            st.info("Keine Dokumente in diesem Bereich vorhanden.")
 
     # ==========================================
-    # TAB 2: VORSTANDSDOKUMENTE (Nur Admin/Vorstand)
+    # TAB 1: ÖFFENTLICHE DOKUMENTE
+    # ==========================================
+    if not is_leitung:
+        st.subheader("Öffentliche Dokumente")
+        
+    with (tab_oeffentlich if is_leitung else st.container()):
+        if is_leitung:
+            st.subheader("Öffentliche Dokumente (für alle Mitglieder sichtbare Dateien)")
+        oeffentliche_docs = get_dokumente(bereich="oeffentlich")
+        dokumente_liste_rendern(oeffentliche_docs, "oeffentlich")
+
+    # ==========================================
+    # TAB 2: VORSTANDSDOKUMENTE
     # ==========================================
     if is_leitung and tab_vorstand:
         with tab_vorstand:
             st.subheader("🔒 Interne Vorstandsdokumente")
             vorstands_docs = get_dokumente(bereich="vorstand")
-            
-            if vorstands_docs:
-                for doc in vorstands_docs:
-                    with st.expander(f"🔐 {doc.get('titel')}"):
-                        st.write(f"**Beschreibung:** {doc.get('beschreibung', 'Keine Beschreibung')}")
-                        
-                        hochgeladen_am = str(doc.get('created_at'))[:10] if doc.get('created_at') else '-'
-                        m_info = doc.get('mitglieder')
-                        hochgeladen_von_name = f"{m_info.get('vorname', '')} {m_info.get('nachname', '')}" if m_info else "Unbekannt"
-                        
-                        st.caption(f"Hochgeladen am {hochgeladen_am} von {hochgeladen_von_name}")
-                        
-                        dateipfad = doc.get("dateipfad")
-                        if dateipfad:
-                            file_bytes = datei_herunterladen(dateipfad)
-                            if file_bytes:
-                                st.download_button(
-                                    label="📥 Interne Datei herunterladen",
-                                    data=file_bytes,
-                                    file_name=dateipfad.split("_", 1)[-1] if "_" in dateipfad else dateipfad,
-                                    key=f"dl_vor_{doc.get('id')}"
-                                )
-                                
-                        if st.button("🗑️ Vorstandsdokument löschen", key=f"del_vor_{doc.get('id')}"):
-                            dokument_loeschen_storage(dateipfad)
-                            dokument_db_loeschen(doc.get("id"))
-                            st.success("Dokument gelöscht!")
-                            st.rerun()
-            else:
-                st.info("Keine internen Vorstandsdokumente vorhanden.")
+            dokumente_liste_rendern(vorstands_docs, "vorstand")
 
     # ==========================================
-    # TAB 3: UPLOAD (Nur Admin/Vorstand)
+    # TAB 3: UPLOAD
     # ==========================================
     if is_leitung and tab_upload:
         with tab_upload:
@@ -136,7 +121,9 @@ def show():
                         dateiname_eindeutig = f"{int(datetime.now().timestamp())}_{hochgeladene_datei.name}"
                         datei_bytes = hochgeladene_datei.getvalue()
                         
-                        erfolg_storage = dokument_hochladen_storage(datei_bytes, dateiname_eindeutig)
+                        # Upload zu Dropbox
+                        erfolg_storage, msg = dokument_hochladen_dropbox(datei_bytes, dateiname_eindeutig)
+                        
                         if erfolg_storage:
                             try:
                                 db_daten = {
@@ -147,9 +134,9 @@ def show():
                                     "hochgeladen_von": user_id
                                 }
                                 dokument_db_eintragen(db_daten)
-                                st.success("Dokument erfolgreich hochgeladen und gespeichert!")
+                                st.success("Dokument erfolgreich in Dropbox hochgeladen und in der Datenbank gespeichert!")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Fehler beim Speichern in der Datenbank: {e}")
+                                st.error(f"Fehler beim Speichern der Metadaten in Supabase: {e}")
                         else:
-                            st.error("Fehler beim Hochladen in den Storage.")
+                            st.error(f"Fehler beim Dropbox-Upload: {msg}")
