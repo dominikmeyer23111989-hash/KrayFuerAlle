@@ -27,15 +27,16 @@ def show():
         tab_neu = None
         tab_statistik = None
     
-    # Hilfsfunktion für die flexible Geburtsdatum-Auswahl (1900 bis heute)
-    def geburtsdatum_auswahl(key_prefix, initial_date=None):
+    # Universelle Hilfsfunktion für Dropdown-Datums-Auswahl (1900 bis heute/Zukunft)
+    def datum_auswahl(titel, key_prefix, initial_date=None, min_jahr=1900):
+        st.markdown(f"**{titel}**")
         if not initial_date:
-            initial_date = datetime(1990, 1, 1)
+            initial_date = datetime.today()
         
-        current_year = datetime.today().year
-        jahre = list(range(current_year, 1899, -1)) # Von aktuell bis 1900
+        current_year = datetime.today().year + 1
+        jahre = list(range(current_year, min_jahr - 1, -1)) # Von aktuell bis min_jahr
         
-        init_jahr = initial_date.year if initial_date.year in jahre else 1990
+        init_jahr = initial_date.year if initial_date.year in jahre else datetime.today().year
         init_monat = initial_date.month
         init_tag = initial_date.day
         
@@ -57,7 +58,7 @@ def show():
         try:
             return datetime(jahr, monat, tag)
         except ValueError:
-            st.error("Ungültiges Datum (z.B. 31. im Februar). Bitte korrigieren.")
+            st.error(f"Ungültiges Datum für {titel} (z.B. 31. im Februar). Bitte korrigieren.")
             return initial_date
 
     # Hilfsfunktion zur Altersberechnung
@@ -184,8 +185,7 @@ def show():
                     vorname = st.text_input("Vorname *")
                     nachname = st.text_input("Nachname *")
                     
-                    st.markdown("**Geburtsdatum**")
-                    geburtsdatum_obj = geburtsdatum_auswahl("neu_geb", datetime(1990, 1, 1))
+                    geburtsdatum_obj = datum_auswahl("Geburtsdatum", "neu_geb", datetime(1990, 1, 1), 1900)
                     
                     geschlecht = st.selectbox("Geschlecht", ["männlich", "weiblich", "divers"])
                     email = st.text_input("E-Mail-Adresse")
@@ -194,7 +194,9 @@ def show():
                     strasse = st.text_input("Straße & Hausnummer")
                     plz = st.text_input("PLZ")
                     ort = st.text_input("Ort")
-                    beitrittsdatum_obj = st.date_input("Eintrittsdatum", value=datetime.today())
+                    
+                    beitrittsdatum_obj = datum_auswahl("Eintrittsdatum", "neu_beitritt", datetime.today(), 1900)
+                    
                     rolle = st.selectbox("Rolle", ["mitglied", "kassenwart", "vorstand", "admin"])
                     inventar_rechte = st.checkbox("Spezielle Inventar-Rechte vergeben")
                     
@@ -258,9 +260,7 @@ def show():
                                     
                                     g_str = m_data.get("geburtsdatum")
                                     g_val = datetime.strptime(g_str.split("T")[0], "%Y-%m-%d") if g_str else datetime(1990, 1, 1)
-                                    
-                                    st.markdown("**Geburtsdatum**")
-                                    e_geburtsdatum = geburtsdatum_auswahl("admin_edit_geb", g_val)
+                                    e_geburtsdatum = datum_auswahl("Geburtsdatum", "admin_edit_geb", g_val, 1900)
                                     
                                     akt_geschlecht = m_data.get("geschlecht", "männlich")
                                     g_optionen = ["männlich", "weiblich", "divers"]
@@ -273,6 +273,10 @@ def show():
                                     e_strasse = st.text_input("Straße & Hausnummer", value=m_data.get("strasse", "") or "")
                                     e_plz = st.text_input("PLZ", value=m_data.get("plz", "") or "")
                                     e_ort = st.text_input("Ort", value=m_data.get("ort", "") or "")
+                                    
+                                    b_str = m_data.get("beitrittsdatum")
+                                    b_val = datetime.strptime(b_str.split("T")[0], "%Y-%m-%d") if b_str else datetime.today()
+                                    e_beitrittsdatum = datum_auswahl("Eintrittsdatum", "admin_edit_beitritt", b_val, 1900)
                                     
                                     aktuelle_rolle = m_data.get("rolle", "mitglied")
                                     rollen_optionen = ["mitglied", "kassenwart", "vorstand", "admin"]
@@ -299,6 +303,7 @@ def show():
                                         "strasse": e_strasse if e_strasse else None,
                                         "plz": e_plz if e_plz else None,
                                         "ort": e_ort if e_ort else None,
+                                        "beitrittsdatum": e_beitrittsdatum.strftime("%Y-%m-%d"),
                                         "rolle": e_rolle,
                                         "hat_inventar_rechte": e_inventar
                                     }
@@ -341,9 +346,7 @@ def show():
                                 
                                 g_str = m_data.get("geburtsdatum")
                                 g_val = datetime.strptime(g_str.split("T")[0], "%Y-%m-%d") if g_str else datetime(1990, 1, 1)
-                                
-                                st.markdown("**Geburtsdatum**")
-                                e_geburtsdatum = geburtsdatum_auswahl("profil_edit_geb", g_val)
+                                e_geburtsdatum = datum_auswahl("Geburtsdatum", "profil_edit_geb", g_val, 1900)
                                 
                                 akt_geschlecht = m_data.get("geschlecht", "männlich")
                                 g_optionen = ["männlich", "weiblich", "divers"]
