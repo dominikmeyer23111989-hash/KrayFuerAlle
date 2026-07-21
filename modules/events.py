@@ -1,4 +1,4 @@
-import supabase
+from database import supabase
 
 # ==========================================
 # 1. EVENTS CRUD
@@ -46,7 +46,7 @@ def schicht_loeschen(schicht_id):
 
 
 # ==========================================
-# 3. RSVPs (RÜCKMELDUNGEN)
+# 3. RSVPS (RÜCKMELDUNGEN)
 # ==========================================
 
 def get_rsvps_fuer_event(event_id):
