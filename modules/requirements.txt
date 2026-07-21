@@ -1,0 +1,6 @@
+streamlit
+supabase
+pandas
+matplotlib
+fpdf2
+dropbox
