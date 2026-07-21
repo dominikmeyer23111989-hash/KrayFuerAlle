@@ -4,9 +4,9 @@ from modules.auth import (
     login_user, 
     finde_email_zu_benutzer, 
     passwort_zuruecksetzen_mit_sicherheitsfrage,
-     erstes_passwort_setzen
+    erstes_passwort_setzen
 )
-from modules import finanzen_page, inventar_page, adressbuch_page, events_page
+from modules import finanzen_page, inventar_page, adressbuch_page, events_page, termine_page
 
 
 # Muss der allererste Streamlit-Befehl sein
@@ -174,7 +174,12 @@ else:
     st.sidebar.divider()
     
     # Navigation dynamisch nach Rolle / Rechten aufbauen
-    nav_optionen = ["Mitglieder & Rollen", "Inventar & Ausleihe", "Events & Schichten"]
+    nav_optionen = [
+        "Mitglieder & Rollen", 
+        "Inventar & Ausleihe", 
+        "Events & Schichten", 
+        "Kalender & Termine"
+    ]
     
     erlaubte_rollen_finanzen = ["admin", "administrator", "vorstand", "kassenwart"]
     if st.session_state.user_rolle in erlaubte_rollen_finanzen:
@@ -205,6 +210,8 @@ else:
         inventar_page.show()
     elif menue == "Events & Schichten":
         events_page.show()
+    elif menue == "Kalender & Termine":
+        termine_page.show()
     elif menue == "Finanzen & Kassenbuch":
         finanzen_page.show()
     elif menue == "Adressbuch":
