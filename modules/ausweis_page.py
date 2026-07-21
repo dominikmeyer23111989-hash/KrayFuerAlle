@@ -38,21 +38,21 @@ def render_ausweiskarte(m_data):
             st.markdown(
                 f"""
                 <div style="border: 2px solid {border_color}; 
-                            border-radius: 10px; padding: 15px; background-color: #0e1117; color: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.5);">
+                            border-radius: 10px; padding: 20px; background-color: #0e1117; color: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.5);">
                 """,
                 unsafe_allow_html=True
             )
             
-            # Header mit größerem Vereinslogo und Titel
-            col_logo, col_titel = st.columns([1, 3])
-            with col_logo:
-                if os.path.exists("KrayFürAlle.jpeg"):
-                    st.image("KrayFürAlle.jpeg", width=150)
-                else:
-                    st.markdown("🏢")
-            with col_titel:
-                st.markdown("<h3 style='margin: 0; color: #f39c12; font-size: 20px;'>KrayFürAlle e.V.</h3>", unsafe_allow_html=True)
-                st.markdown("<p style='font-size: 11px; color: gray; margin: 0;'>Offizieller Mitgliedsausweis</p>", unsafe_allow_html=True)
+            # Großes, zentriertes Vereinslogo oben im Ausweis
+            if os.path.exists("KrayFürAlle.jpeg"):
+                _, col_logo_center, _ = st.columns([1, 2, 1])
+                with col_logo_center:
+                    st.image("KrayFürAlle.jpeg", width=220)
+            else:
+                st.markdown("<h2 style='text-align: center;'>🏢</h2>", unsafe_allow_html=True)
+                
+            st.markdown("<h3 style='text-align: center; color: #f39c12; margin: 5px 0 0 0;'>KrayFürAlle e.V.</h3>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-bottom: 15px;'>Offizieller Mitgliedsausweis</p>", unsafe_allow_html=True)
             
             st.markdown("<hr style='margin: 10px 0; border-color: #333;'>", unsafe_allow_html=True)
             
