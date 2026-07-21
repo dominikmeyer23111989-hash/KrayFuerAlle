@@ -57,7 +57,7 @@ def show():
         try:
             return datetime(jahr, monat, tag)
         except ValueError:
-            st.error(f"Ungültiges Datum (z.B. 31. im Februar). Bitte korrigieren.")
+            st.error("Ungültiges Datum (z.B. 31. im Februar). Bitte korrigieren.")
             return initial_date
 
     # Hilfsfunktion zur Altersberechnung
@@ -90,7 +90,7 @@ def show():
             return "Über 65 Jahre"
 
     # ==========================================
-    # 1. MITGLIEDERLISTE (Sicher: Keine Passwörter/Sicherheitsfragen)
+    # 1. MITGLIEDERLISTE (Mit DD/MM/YYYY Formatierung)
     # ==========================================
     with tab_liste:
         st.subheader("Übersicht aller Vereinsmitglieder")
@@ -101,12 +101,23 @@ def show():
             
             if mitglieder:
                 for m in mitglieder:
+                    # Beitrittsdatum formatieren (DD/MM/YYYY)
                     b_datum = m.get("beitrittsdatum")
                     if b_datum:
                         try:
                             if "T" in str(b_datum): b_datum = str(b_datum).split("T")[0]
                             elif " " in str(b_datum): b_datum = str(b_datum).split(" ")[0]
                             m["beitrittsdatum"] = datetime.strptime(b_datum, "%Y-%m-%d").strftime("%d/%m/%Y")
+                        except Exception:
+                            pass
+                    
+                    # Geburtsdatum formatieren (DD/MM/YYYY)
+                    g_datum = m.get("geburtsdatum")
+                    if g_datum:
+                        try:
+                            if "T" in str(g_datum): g_datum = str(g_datum).split("T")[0]
+                            elif " " in str(g_datum): g_datum = str(g_datum).split(" ")[0]
+                            m["geburtsdatum"] = datetime.strptime(g_datum, "%Y-%m-%d").strftime("%d/%m/%Y")
                         except Exception:
                             pass
 
@@ -121,7 +132,7 @@ def show():
                         "mitgliedsnummer": "Mitglieds-Nr",
                         "vorname": "Vorname",
                         "nachname": "Nachname",
-                        "geburtsdatum": "Geburtsdatum",
+                        "geburtsdatum": "Geburtsdatum (DD/MM/YYYY)",
                         "geschlecht": "Geschlecht",
                         "email": "E-Mail",
                         "telefonnummer": "Telefon",
