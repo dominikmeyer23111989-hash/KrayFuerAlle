@@ -47,7 +47,7 @@ def render_ausweiskarte(m_data):
             col_logo, col_titel = st.columns([1, 3])
             with col_logo:
                 if os.path.exists("KrayFürAlle.jpeg"):
-                    st.image("KrayFürAlle.jpeg", width=300)
+                    st.image("KrayFürAlle.jpeg", width=500)
                 else:
                     st.markdown("🏢")
             with col_titel:
