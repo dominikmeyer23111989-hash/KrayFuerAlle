@@ -44,9 +44,32 @@ def termin_loeschen(termin_id):
     return response.data
 
 def get_teilnahmen_fuer_termin(termin_id):
-    """Gibt alle Teilnahmen für einen bestimmten Termin inklusive Mitglieder-Details zurück."""
-    response = supabase.table("teilnahmen").select("*, mitglieder(vorname, nachname, rolle, email)").eq("termin_id", termin_id).execute()
-    return response.data if response.data else []
+    try:
+        # 1. Teilnahmen für den Termin laden
+        res_t = supabase.table("teilnahmen").select("*").eq("termin_id", termin_id).execute()
+        teilnahmen = res_t.data if res_t.data else []
+        
+        if not teilnahmen:
+            return []
+            
+        # 2. Zugehörige Mitglieder-IDs sammeln
+        user_ids = [t.get("user_id") for t in teilnahmen if t.get("user_id")]
+        if not user_ids:
+            return teilnahmen
+            
+        # 3. Mitglieder-Details separat laden
+        res_m = supabase.table("mitglieder").select("id, vorname, nachname, rolle, email").in_("id", user_ids).execute()
+        mitglieder_map = {m["id"]: m for m in res_m.data} if res_m.data else {}
+        
+        # 4. Datenstruktur für das Frontend zusammenführen
+        for t in teilnahmen:
+            u_id = t.get("user_id")
+            t["mitglieder"] = mitglieder_map.get(u_id, {})
+            
+        return teilnahmen
+    except Exception as e:
+        print(f"Fehler beim Laden der Teilnahmen: {e}")
+        return []
 
 def setze_teilnahme(termin_id, user_id, status):
     """Setzt oder aktualisiert die Teilnahme (RSVP) eines Mitglieds für einen Termin."""
