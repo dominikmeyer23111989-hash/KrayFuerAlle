@@ -7,6 +7,7 @@ from modules.ausweis import (
     foto_herunterladen_dropbox,
     mitglied_ausweis_aktualisieren
 )
+import os
 
 def render_ausweiskarte(m_data):
     """Hilfsfunktion zum Zeichnen der Ausweiskarte"""
@@ -29,44 +30,60 @@ def render_ausweiskarte(m_data):
             ist_abgelaufen = False
 
     # Styling Box für den Ausweis
+    border_color = '#ff4b4b' if ist_gesperrt or ist_abgelaufen else '#2ecc71'
+    
     with st.container():
-        st.markdown(
-            f"""
-            <div style="border: 2px solid {'#ff4b4b' if ist_gesperrt or ist_abgelaufen else '#2ecc71'}; 
-                        border-radius: 10px; padding: 20px; background-color: #0e1117; color: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.5);">
-                <h3 style="margin: 0; color: #f39c12;">🏢 KrayFürAlle e.V.</h3>
-                <p style="font-size: 12px; color: gray; margin-bottom: 15px;">Offizieller Mitgliedsausweis</p>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-        
-        col_foto, col_info = st.columns([1, 2])
-        
-        with col_foto:
-            if foto_pfad:
-                img_bytes = foto_herunterladen_dropbox(foto_pfad)
-                if img_bytes:
-                    st.image(img_bytes, width=120)
-                else:
-                    st.info("📷 Kein Foto in Dropbox gefunden.")
-            else:
-                st.info("📷 Kein Foto hochgeladen.")
-                
-        with col_info:
-            st.markdown(f"**Name:** {vorname} {nachname}")
-            st.markdown(f"**Mitglieds-Nr:** {mitgliedsnummer}")
+        # Äußerer Container für den Ausweis-Look
+        with st.container():
+            st.markdown(
+                f"""
+                <div style="border: 2px solid {border_color}; 
+                            border-radius: 10px; padding: 15px; background-color: #0e1117; color: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.5);">
+                """,
+                unsafe_allow_html=True
+            )
             
-            # Statusanzeige
-            if ist_gesperrt:
-                st.error("🚫 Ausweis GESPERRT")
-            elif ist_abgelaufen:
-                st.warning("⚠️ Ausweis ABGELAUFEN")
-            else:
-                st.success("✅ Ausweis GÜLTIG")
+            # Header mit Vereinslogo (falls vorhanden) und Titel
+            col_logo, col_titel = st.columns([1, 4])
+            with col_logo:
+                if os.path.exists("KrayFürAlle.jpeg"):
+                    st.image("KrayFürAlle.jpeg", width=50)
+                else:
+                    st.markdown("🏢")
+            with col_titel:
+                st.markdown("<h3 style='margin: 0; color: #f39c12; font-size: 20px;'>KrayFürAlle e.V.</h3>", unsafe_allow_html=True)
+                st.markdown("<p style='font-size: 11px; color: gray; margin: 0;'>Offizieller Mitgliedsausweis</p>", unsafe_allow_html=True)
+            
+            st.markdown("<hr style='margin: 10px 0; border-color: #333;'>", unsafe_allow_html=True)
+            
+            col_foto, col_info = st.columns([1, 2])
+            
+            with col_foto:
+                if foto_pfad:
+                    img_bytes = foto_herunterladen_dropbox(foto_pfad)
+                    if img_bytes:
+                        st.image(img_bytes, width=110)
+                    else:
+                        st.info("📷 Kein Foto in Dropbox gefunden.")
+                else:
+                    st.info("📷 Kein Foto hochgeladen.")
+                    
+            with col_info:
+                st.markdown(f"**Name:** {vorname} {nachname}")
+                st.markdown(f"**Mitglieds-Nr:** {mitgliedsnummer}")
                 
-            g_str = gueltig_bis if gueltig_bis else "Unbekannt"
-            st.caption(f"Gültig bis: {g_str}")
+                # Statusanzeige
+                if ist_gesperrt:
+                    st.error("🚫 Ausweis GESPERRT")
+                elif ist_abgelaufen:
+                    st.warning("⚠️ Ausweis ABGELAUFEN")
+                else:
+                    st.success("✅ Ausweis GÜLTIG")
+                    
+                g_str = gueltig_bis if gueltig_bis else "Unbekannt"
+                st.caption(f"Gültig bis: {g_str}")
+                
+            st.markdown("</div>", unsafe_allow_html=True)
 
 def show():
     st.header("🪪 Mitgliedsausweis")
