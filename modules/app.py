@@ -6,8 +6,16 @@ from modules.auth import (
     passwort_zuruecksetzen_mit_sicherheitsfrage,
     erstes_passwort_setzen
 )
-from modules import finanzen_page, inventar_page, adressbuch_page, events_page, termine_page, todos_page, dokumente_page
-
+from modules import (
+    finanzen_page, 
+    inventar_page, 
+    adressbuch_page, 
+    events_page, 
+    termine_page, 
+    todos_page, 
+    dokumente_page, 
+    ausweis_page
+)
 
 # Muss der allererste Streamlit-Befehl sein
 st.set_page_config(page_title="KrayFürAlle e.V. - Verwaltung", page_icon="🏢", layout="wide")
@@ -176,6 +184,7 @@ else:
     # Navigation dynamisch nach Rolle / Rechten aufbauen
     nav_optionen = [
         "Mitglieder & Rollen", 
+        "Mitgliedsausweis", 
         "Inventar & Ausleihe", 
         "Events & Schichten", 
         "Kalender & Termine",
@@ -208,6 +217,8 @@ else:
     # Seiten aufrufen
     if menue == "Mitglieder & Rollen":
         mitglieder_page.show()
+    elif menue == "Mitgliedsausweis":
+        ausweis_page.show()
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
     elif menue == "Events & Schichten":
