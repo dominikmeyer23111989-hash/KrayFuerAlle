@@ -57,22 +57,23 @@ def show():
             return "Über 65 Jahre"
 
     # ==========================================
-    # 1. MITGLIEDERLISTE
+    # 1. MITGLIEDERLISTE (Sicher: Keine Passwörter/Sicherheitsfragen)
     # ==========================================
     with tab_liste:
         st.subheader("Übersicht aller Vereinsmitglieder")
         try:
-            res = supabase.table("mitglieder").select("*").execute()
+            sichere_spalten = "id, mitgliedsnummer, vorname, nachname, geburtsdatum, geschlecht, email, telefonnummer, strasse, plz, ort, beitrittsdatum, rolle, hat_inventar_rechte"
+            res = supabase.table("mitglieder").select(sichere_spalten).execute()
             mitglieder = res.data if res.data else []
             
             if mitglieder:
                 for m in mitglieder:
-                    e_datum = m.get("eintrittsdatum")
-                    if e_datum:
+                    b_datum = m.get("beitrittsdatum")
+                    if b_datum:
                         try:
-                            if "T" in str(e_datum): e_datum = str(e_datum).split("T")[0]
-                            elif " " in str(e_datum): e_datum = str(e_datum).split(" ")[0]
-                            m["eintrittsdatum"] = datetime.strptime(e_datum, "%Y-%m-%d").strftime("%d/%m/%Y")
+                            if "T" in str(b_datum): b_datum = str(b_datum).split("T")[0]
+                            elif " " in str(b_datum): b_datum = str(b_datum).split(" ")[0]
+                            m["beitrittsdatum"] = datetime.strptime(b_datum, "%Y-%m-%d").strftime("%d/%m/%Y")
                         except Exception:
                             pass
 
@@ -93,7 +94,7 @@ def show():
                         "telefonnummer": "Telefon",
                         "rolle": "Rolle",
                         "hat_inventar_rechte": "Inventar-Rechte",
-                        "eintrittsdatum": "Eintritt (DD/MM/YYYY)"
+                        "beitrittsdatum": "Eintritt (DD/MM/YYYY)"
                     },
                     hide_index=True
                 )
@@ -138,7 +139,13 @@ def show():
                 with col1:
                     vorname = st.text_input("Vorname *")
                     nachname = st.text_input("Nachname *")
-                    geburtsdatum_obj = st.date_input("Geburtsdatum", value=datetime(1990, 1, 1))
+                    # Geburtsdatum von 1900 bis heute (dynamisch erweiternd)
+                    geburtsdatum_obj = st.date_input(
+                        "Geburtsdatum", 
+                        value=datetime(1990, 1, 1), 
+                        min_value=datetime(1900, 1, 1), 
+                        max_value=datetime.today()
+                    )
                     geschlecht = st.selectbox("Geschlecht", ["männlich", "weiblich", "divers"])
                     email = st.text_input("E-Mail-Adresse")
                     telefon = st.text_input("Telefonnummer")
@@ -146,7 +153,7 @@ def show():
                     strasse = st.text_input("Straße & Hausnummer")
                     plz = st.text_input("PLZ")
                     ort = st.text_input("Ort")
-                    eintrittsdatum_obj = st.date_input("Eintrittsdatum", value=datetime.today())
+                    beitrittsdatum_obj = st.date_input("Eintrittsdatum", value=datetime.today())
                     rolle = st.selectbox("Rolle", ["mitglied", "kassenwart", "vorstand", "admin"])
                     inventar_rechte = st.checkbox("Spezielle Inventar-Rechte vergeben")
                     
@@ -167,7 +174,7 @@ def show():
                             "strasse": strasse,
                             "plz": plz,
                             "ort": ort,
-                            "eintrittsdatum": eintrittsdatum_obj.strftime("%Y-%m-%d"),
+                            "beitrittsdatum": beitrittsdatum_obj.strftime("%Y-%m-%d"),
                             "rolle": rolle,
                             "hat_inventar_rechte": inventar_rechte
                         }
@@ -211,7 +218,12 @@ def show():
                                     # Datum parsen
                                     g_str = m_data.get("geburtsdatum")
                                     g_val = datetime.strptime(g_str.split("T")[0], "%Y-%m-%d") if g_str else datetime(1990, 1, 1)
-                                    e_geburtsdatum = st.date_input("Geburtsdatum", value=g_val)
+                                    e_geburtsdatum = st.date_input(
+                                        "Geburtsdatum", 
+                                        value=g_val, 
+                                        min_value=datetime(1900, 1, 1), 
+                                        max_value=datetime.today()
+                                    )
                                     
                                     akt_geschlecht = m_data.get("geschlecht", "männlich")
                                     g_optionen = ["männlich", "weiblich", "divers"]
@@ -292,7 +304,12 @@ def show():
                                 
                                 g_str = m_data.get("geburtsdatum")
                                 g_val = datetime.strptime(g_str.split("T")[0], "%Y-%m-%d") if g_str else datetime(1990, 1, 1)
-                                e_geburtsdatum = st.date_input("Geburtsdatum", value=g_val)
+                                e_geburtsdatum = st.date_input(
+                                    "Geburtsdatum", 
+                                    value=g_val, 
+                                    min_value=datetime(1900, 1, 1), 
+                                    max_value=datetime.today()
+                                )
                                 
                                 akt_geschlecht = m_data.get("geschlecht", "männlich")
                                 g_optionen = ["männlich", "weiblich", "divers"]
@@ -342,7 +359,6 @@ def show():
                 daten = res.data if res.data else []
                 
                 if daten:
-                    # Aufbereitung für Pandas
                     df = pd.DataFrame(daten)
                     df["alter"] = df["geburtsdatum"].apply(berechne_alter)
                     df["altersgruppe"] = df["alter"].apply(get_altersgruppe)
@@ -355,7 +371,6 @@ def show():
                     
                     st.divider()
                     
-                    # Daten aggregieren
                     if kategorie_wahl == "Altersgruppen":
                         reihenfolge = ["0-12 Jahre", "13-18 Jahre", "18-35 Jahre", "35-65 Jahre", "Über 65 Jahre", "Kein Angabe"]
                         counts = df["altersgruppe"].value_counts().reindex(reihenfolge, fill_value=0)
@@ -365,7 +380,6 @@ def show():
                         counts.index = counts.index.fillna("Keine Angabe")
                         titel = "Geschlechterverteilung der Mitglieder"
 
-                    # Chart zeichnen mit Matplotlib
                     fig, ax = plt.subplots(figsize=(8, 5))
                     if diagramm_typ == "Balkendiagramm":
                         counts.plot(kind="bar", ax=ax, color="#1f77b4", edgecolor="black")
@@ -382,7 +396,6 @@ def show():
                     st.subheader("📄 PDF-Export")
                     st.markdown("Generiere einen kompakten PDF-Bericht der Mitgliederliste und der statistischen Auswertung.")
                     
-                    # PDF Generation Logik
                     class PDF(FPDF):
                         def header(self):
                             self.set_font('helvetica', 'B', 15)
@@ -398,7 +411,6 @@ def show():
                         pdf = PDF()
                         pdf.add_page()
                         
-                        # Statistik-Zusammenfassung ins PDF schreiben
                         pdf.set_font('helvetica', 'B', 12)
                         pdf.cell(0, 10, '1. Statistische Zusammenfassung', 0, 1)
                         pdf.set_font('helvetica', '', 10)
@@ -421,12 +433,10 @@ def show():
 
                         pdf.ln(10)
                         
-                        # Mitgliederliste Tabelle ins PDF schreiben
                         pdf.set_font('helvetica', 'B', 12)
                         pdf.cell(0, 10, '2. Detaillierte Mitgliederliste', 0, 1)
                         pdf.set_font('helvetica', 'B', 9)
                         
-                        # Tabellenkopf
                         pdf.cell(20, 8, 'Nr', 1)
                         pdf.cell(45, 8, 'Name', 1)
                         pdf.cell(35, 8, 'Telefon', 1)
