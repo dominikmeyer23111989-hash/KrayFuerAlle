@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, time
 import pandas as pd
 from modules.events import (
     get_alle_events,
@@ -19,7 +19,7 @@ from modules.events import (
     freigabe_loeschen
 )
 from modules.inventar import get_alle_inventar, formatiere_datum_fuer_anzeige
-import supabase
+from database import supabase
 
 def get_alle_mitglieder():
     try:
@@ -28,11 +28,43 @@ def get_alle_mitglieder():
     except Exception:
         return []
 
+def get_kontakte_fuer_auswahl():
+    """Sammelt Namen aus Mitgliedern und Adressbuch für die Ansprechpartner-Auswahl."""
+    kontakte = []
+    try:
+        res_m = supabase.table("mitglieder").select("vorname, nachname").execute()
+        if res_m.data:
+            for m in res_m.data:
+                name = f"{m.get('vorname', '')} {m.get('nachname', '')}".strip()
+                if name:
+                    kontakte.append(f"{name} (Mitglied)")
+    except Exception:
+        pass
+    try:
+        res_a = supabase.table("adressbuch").select("name, vorname, nachname").execute()
+        if res_a.data:
+            for a in res_a.data:
+                n = a.get('name') or f"{a.get('vorname', '')} {a.get('nachname', '')}".strip()
+                if n:
+                    kontakte.append(f"{n} (Adressbuch)")
+    except Exception:
+        pass
+    return sorted(list(set(kontakte)))
+
+def parse_time(t_str):
+    if not t_str:
+        return time(0, 0)
+    try:
+        parts = str(t_str).split(":")
+        return time(hour=int(parts[0]), minute=int(parts[1]))
+    except Exception:
+        return time(0, 0)
+
 def show():
     st.header("📅 Event- & Veranstaltungsverwaltung")
     
     is_admin_or_vorstand = st.session_state.get("user_rolle", "").lower() in ["admin", "administrator", "vorstand", "kassenwart"]
-    aktuelles_mitglied_id = st.session_state.get("mitglied_id")
+    aktuelles_mitglied_id = st.session_state.get("user_id")
     
     # Tabs definieren
     tab_uebersicht, tab_erstellung, tab_schichten, tab_material, tab_freigaben = st.tabs([
@@ -44,6 +76,7 @@ def show():
     ])
 
     events = get_alle_events()
+    kontakte_liste = get_kontakte_fuer_auswahl()
     
     # ==========================================
     # 1. EVENT-ÜBERSICHT & RSVPS
@@ -86,30 +119,27 @@ def show():
                                     aktueller_status = r.get("status", "unsicher")
                                     break
                         
-                        status_optionen = ["kann", "kann nicht", "unsicher"]
-                        try:
-                            current_index = status_optionen.index(aktueller_status)
-                        except ValueError:
-                            current_index = 2
-                            
+                        st.markdown(f"Dein aktueller Status: **{aktueller_status.capitalize()}**")
+                        
                         if aktuelles_mitglied_id:
-                            neuer_status = st.selectbox(
-                                "Kannst du teilnehmen?",
-                                options=status_optionen,
-                                index=current_index,
-                                format_func=lambda x: {"kann": "✅ Kann teilnehmen", "kann nicht": "❌ Kann nicht", "unsicher": "❓ Unsicher"}[x],
-                                key=f"rsvp_{ev.get('id')}"
-                            )
-                            if st.button("Rückmeldung speichern", key=f"btn_rsvp_{ev.get('id')}"):
-                                try:
-                                    setze_rsvp(ev.get("id"), aktuelles_mitglied_id, neuer_status)
-                                    st.success("Rückmeldung gespeichert!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Fehler: {e}")
+                            col_b1, col_b2, col_b3 = st.columns(3)
+                            ev_id = ev.get("id")
+                            if col_b1.button("✅ Kann teilnehmen", key=f"btn_kann_{ev_id}", use_container_width=True):
+                                setze_rsvp(ev_id, aktuelles_mitglied_id, "kann")
+                                st.success("Zusage gespeichert!")
+                                st.rerun()
+                            if col_b2.button("❌ Kann nicht", key=f"btn_nicht_{ev_id}", use_container_width=True):
+                                setze_rsvp(ev_id, aktuelles_mitglied_id, "kann nicht")
+                                st.success("Absage gespeichert!")
+                                st.rerun()
+                            if col_b3.button("❓ Unsicher", key=f"btn_unsicher_{ev_id}", use_container_width=True):
+                                setze_rsvp(ev_id, aktuelles_mitglied_id, "unsicher")
+                                st.success("Status auf unsicher gesetzt!")
+                                st.rerun()
                         else:
-                            st.warning("Keine Mitglieds-ID im Session State gefunden, um RSVP direkt zu setzen.")
+                            st.warning("Keine Mitglieds-ID im Session State gefunden.")
                             
+                        st.divider()
                         # Übersicht aller Zusagen
                         st.markdown("**Teilnahme-Übersicht:**")
                         if rsvps:
@@ -151,7 +181,9 @@ def show():
                         e_uhr_start = st.time_input("Uhrzeit Beginn")
                         e_uhr_treffen = st.time_input("Uhrzeit Treffen")
                         e_uhr_ende = st.time_input("Uhrzeit Ende (optional)", value=None)
-                        e_ansprech = st.text_input("Ansprechperson")
+                        
+                        ansprech_wahl = st.selectbox("Ansprechperson aus Adressbuch/Mitgliedern", options=["-- Manuell eingeben --"] + kontakte_liste)
+                        e_ansprech_manuell = st.text_input("Oder Ansprechperson manuell eintragen")
                         
                     e_bemerkung = st.text_area("Bemerkungen / Infos")
                     
@@ -160,6 +192,7 @@ def show():
                         if not e_name or not e_treffpunkt or not e_ort:
                             st.error("Name, Treffpunkt und Ort sind Pflichtfelder.")
                         else:
+                            final_ansprech = e_ansprech_manuell if ansprech_wahl == "-- Manuell eingeben --" else ansprech_wahl
                             daten = {
                                 "name": e_name,
                                 "start_datum": e_start.strftime("%Y-%m-%d"),
@@ -170,7 +203,7 @@ def show():
                                 "ort": e_ort,
                                 "uhrzeit_ende": e_uhr_ende.strftime("%H:%M:%S") if e_uhr_ende else None,
                                 "bemerkungen": e_bemerkung if e_bemerkung else None,
-                                "ansprechperson": e_ansprech if e_ansprech else None
+                                "ansprechperson": final_ansprech if final_ansprech else None
                             }
                             try:
                                 event_erstellen(daten)
@@ -197,12 +230,6 @@ def show():
                         
                         ee_treffpunkt = st.text_input("Treffpunkt", value=sel_ev.get("treffpunkt", ""))
                         ee_ort = st.text_input("Ort", value=sel_ev.get("ort", ""))
-                        
-                        def parse_time(t_str):
-                            if not t_str:
-                                return datetime.now().time()
-                            parts = t_str.split(":")
-                            return datetime.now().time(hour=int(parts[0]), minute=int(parts[1]))
                             
                         ee_uhr_start = st.time_input("Uhrzeit Beginn", value=parse_time(sel_ev.get("uhrzeit_start")))
                         ee_uhr_treffen = st.time_input("Uhrzeit Treffen", value=parse_time(sel_ev.get("uhrzeit_treffen")))
@@ -210,7 +237,10 @@ def show():
                         ende_str = sel_ev.get("uhrzeit_ende")
                         ee_uhr_ende = st.time_input("Uhrzeit Ende", value=parse_time(ende_str) if ende_str else None)
                         
-                        ee_ansprech = st.text_input("Ansprechperson", value=sel_ev.get("ansprechperson", "") or "")
+                        aktuelle_ansprech = sel_ev.get("ansprechperson", "") or ""
+                        ansprech_edit_wahl = st.selectbox("Ansprechperson aus Adressbuch/Mitgliedern", options=["-- Manuell / Unverändert --"] + kontakte_liste)
+                        ee_ansprech_manuell = st.text_input("Ansprechperson (manuell)", value=aktuelle_ansprech)
+                        
                         ee_bemerkungen = st.text_area("Bemerkungen", value=sel_ev.get("bemerkungen", "") or "")
                         
                         col_s, col_d = st.columns(2)
@@ -220,6 +250,7 @@ def show():
                             del_btn = st.form_submit_button("Event löschen", type="secondary")
                             
                         if up_btn:
+                            final_ansprech_edit = ee_ansprech_manuell if ansprech_edit_wahl == "-- Manuell / Unverändert --" else ansprech_edit_wahl
                             daten = {
                                 "name": ee_name,
                                 "start_datum": ee_start.strftime("%Y-%m-%d"),
@@ -230,7 +261,7 @@ def show():
                                 "ort": ee_ort,
                                 "uhrzeit_ende": ee_uhr_ende.strftime("%H:%M:%S") if ee_uhr_ende else None,
                                 "bemerkungen": ee_bemerkungen if ee_bemerkungen else None,
-                                "ansprechperson": ee_ansprech if ee_ansprech else None
+                                "ansprechperson": final_ansprech_edit if final_ansprech_edit else None
                             }
                             try:
                                 event_aktualisieren(sel_ev.get("id"), daten)
