@@ -43,11 +43,11 @@ def render_ausweiskarte(m_data):
                 unsafe_allow_html=True
             )
             
-            # Header mit Vereinslogo (falls vorhanden) und Titel
-            col_logo, col_titel = st.columns([1, 4])
+            # Header mit größerem Vereinslogo und Titel
+            col_logo, col_titel = st.columns([1, 3])
             with col_logo:
                 if os.path.exists("KrayFürAlle.jpeg"):
-                    st.image("KrayFürAlle.jpeg", width=50)
+                    st.image("KrayFürAlle.jpeg", width=90)
                 else:
                     st.markdown("🏢")
             with col_titel:
