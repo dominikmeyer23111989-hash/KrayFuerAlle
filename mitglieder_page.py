@@ -27,6 +27,39 @@ def show():
         tab_neu = None
         tab_statistik = None
     
+    # Hilfsfunktion für die flexible Geburtsdatum-Auswahl (1900 bis heute)
+    def geburtsdatum_auswahl(key_prefix, initial_date=None):
+        if not initial_date:
+            initial_date = datetime(1990, 1, 1)
+        
+        current_year = datetime.today().year
+        jahre = list(range(current_year, 1899, -1)) # Von aktuell bis 1900
+        
+        init_jahr = initial_date.year if initial_date.year in jahre else 1990
+        init_monat = initial_date.month
+        init_tag = initial_date.day
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            jahr = st.selectbox("Jahr", jahre, index=jahre.index(init_jahr), key=f"{key_prefix}_jahr")
+        
+        monate_dict = {
+            1: "Januar", 2: "Februar", 3: "März", 4: "April", 5: "Mai", 6: "Juni",
+            7: "Juli", 8: "August", 9: "September", 10: "Oktober", 11: "November", 12: "Dezember"
+        }
+        with c2:
+            monat_name = st.selectbox("Monat", list(monate_dict.values()), index=init_monat-1, key=f"{key_prefix}_monat")
+            monat = [k for k, v in monate_dict.items() if v == monat_name][0]
+        
+        with c3:
+            tag = st.selectbox("Tag", list(range(1, 32)), index=min(init_tag-1, 30), key=f"{key_prefix}_tag")
+        
+        try:
+            return datetime(jahr, monat, tag)
+        except ValueError:
+            st.error(f"Ungültiges Datum (z.B. 31. im Februar). Bitte korrigieren.")
+            return initial_date
+
     # Hilfsfunktion zur Altersberechnung
     def berechne_alter(geburtsdatum_str):
         if not geburtsdatum_str:
@@ -139,13 +172,10 @@ def show():
                 with col1:
                     vorname = st.text_input("Vorname *")
                     nachname = st.text_input("Nachname *")
-                    # Geburtsdatum von 1900 bis heute (dynamisch erweiternd)
-                    geburtsdatum_obj = st.date_input(
-                        "Geburtsdatum", 
-                        value=datetime(1990, 1, 1), 
-                        min_value=datetime(1900, 1, 1), 
-                        max_value=datetime.today()
-                    )
+                    
+                    st.markdown("**Geburtsdatum**")
+                    geburtsdatum_obj = geburtsdatum_auswahl("neu_geb", datetime(1990, 1, 1))
+                    
                     geschlecht = st.selectbox("Geschlecht", ["männlich", "weiblich", "divers"])
                     email = st.text_input("E-Mail-Adresse")
                     telefon = st.text_input("Telefonnummer")
@@ -215,15 +245,11 @@ def show():
                                     e_vorname = st.text_input("Vorname", value=m_data.get("vorname", ""))
                                     e_nachname = st.text_input("Nachname", value=m_data.get("nachname", ""))
                                     
-                                    # Datum parsen
                                     g_str = m_data.get("geburtsdatum")
                                     g_val = datetime.strptime(g_str.split("T")[0], "%Y-%m-%d") if g_str else datetime(1990, 1, 1)
-                                    e_geburtsdatum = st.date_input(
-                                        "Geburtsdatum", 
-                                        value=g_val, 
-                                        min_value=datetime(1900, 1, 1), 
-                                        max_value=datetime.today()
-                                    )
+                                    
+                                    st.markdown("**Geburtsdatum**")
+                                    e_geburtsdatum = geburtsdatum_auswahl("admin_edit_geb", g_val)
                                     
                                     akt_geschlecht = m_data.get("geschlecht", "männlich")
                                     g_optionen = ["männlich", "weiblich", "divers"]
@@ -304,12 +330,9 @@ def show():
                                 
                                 g_str = m_data.get("geburtsdatum")
                                 g_val = datetime.strptime(g_str.split("T")[0], "%Y-%m-%d") if g_str else datetime(1990, 1, 1)
-                                e_geburtsdatum = st.date_input(
-                                    "Geburtsdatum", 
-                                    value=g_val, 
-                                    min_value=datetime(1900, 1, 1), 
-                                    max_value=datetime.today()
-                                )
+                                
+                                st.markdown("**Geburtsdatum**")
+                                e_geburtsdatum = geburtsdatum_auswahl("profil_edit_geb", g_val)
                                 
                                 akt_geschlecht = m_data.get("geschlecht", "männlich")
                                 g_optionen = ["männlich", "weiblich", "divers"]
