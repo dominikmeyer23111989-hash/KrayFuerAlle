@@ -6,7 +6,7 @@ from modules.auth import (
     passwort_zuruecksetzen_mit_sicherheitsfrage,
     erstes_passwort_setzen
 )
-from modules import finanzen_page, inventar_page, adressbuch_page, events_page, termine_page, todos_page
+from modules import finanzen_page, inventar_page, adressbuch_page, events_page, termine_page, todos_page, dokumente_page
 
 
 # Muss der allererste Streamlit-Befehl sein
@@ -179,7 +179,8 @@ else:
         "Inventar & Ausleihe", 
         "Events & Schichten", 
         "Kalender & Termine",
-        "Aufgaben & To-Dos"
+        "Aufgaben & To-Dos",
+        "Dokumente"
     ]
     
     erlaubte_rollen_finanzen = ["admin", "administrator", "vorstand", "kassenwart"]
@@ -215,6 +216,8 @@ else:
         termine_page.show()
     elif menue == "Aufgaben & To-Dos":
         todos_page.show()
+    elif menue == "Dokumente":
+        dokumente_page.show()
     elif menue == "Finanzen & Kassenbuch":
         finanzen_page.show()
     elif menue == "Adressbuch":
