@@ -16,12 +16,10 @@ from modules import (
     dokumente_page, 
     ausweis_page
 )
+import modules.mitglieder_page as mitglieder_page
 
 # Muss der allererste Streamlit-Befehl sein
 st.set_page_config(page_title="KrayFürAlle e.V. - Verwaltung", page_icon="🏢", layout="wide")
-
-# Einziger verbleibender Seiten-Import
-import mitglieder_page  
 
 # --- SESSION STATE INITIALISIERUNG ---
 if "logged_in" not in st.session_state:
@@ -171,6 +169,13 @@ if not st.session_state.logged_in:
 # --- OBERFLÄCHE FÜR EINGELOGGTE NUTZER ---
 else:
     st.sidebar.title("🏢 KrayFürAlle e.V.")
+    
+    # Vereinslogo direkt in der Sidebar anzeigen
+    try:
+        st.sidebar.image("KrayFürAlle.jpeg", use_container_width=True)
+    except Exception:
+        pass
+
     st.sidebar.markdown(f"Hallo, **{st.session_state.vorname}**!")
     st.sidebar.caption(f"Rolle: {st.session_state.user_rolle.capitalize()}")
     
