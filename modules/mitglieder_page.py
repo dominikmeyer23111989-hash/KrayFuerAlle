@@ -27,7 +27,7 @@ def show():
         tab_neu = None
         tab_statistik = None
     
-    # Universelle Hilfsfunktion für Dropdown-Datums-Auswahl (1900 bis heute/Zukunft)
+    # Universelle Hilfsfunktion: Reihenfolge Tag -> Monat -> Jahr
     def datum_auswahl(titel, key_prefix, initial_date=None, min_jahr=1900):
         st.markdown(f"**{titel}**")
         if not initial_date:
@@ -41,19 +41,24 @@ def show():
         init_tag = initial_date.day
         
         c1, c2, c3 = st.columns(3)
+        
+        # 1. Spalte: Tag
         with c1:
-            jahr = st.selectbox("Jahr", jahre, index=jahre.index(init_jahr), key=f"{key_prefix}_jahr")
+            tag = st.selectbox("Tag", list(range(1, 32)), index=min(init_tag-1, 30), key=f"{key_prefix}_tag")
         
         monate_dict = {
             1: "Januar", 2: "Februar", 3: "März", 4: "April", 5: "Mai", 6: "Juni",
             7: "Juli", 8: "August", 9: "September", 10: "Oktober", 11: "November", 12: "Dezember"
         }
+        
+        # 2. Spalte: Monat
         with c2:
             monat_name = st.selectbox("Monat", list(monate_dict.values()), index=init_monat-1, key=f"{key_prefix}_monat")
             monat = [k for k, v in monate_dict.items() if v == monat_name][0]
         
+        # 3. Spalte: Jahr
         with c3:
-            tag = st.selectbox("Tag", list(range(1, 32)), index=min(init_tag-1, 30), key=f"{key_prefix}_tag")
+            jahr = st.selectbox("Jahr", jahre, index=jahre.index(init_jahr), key=f"{key_prefix}_jahr")
         
         try:
             return datetime(jahr, monat, tag)
