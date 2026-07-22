@@ -3,15 +3,22 @@ from database import supabase
 def finde_email_zu_benutzer(identifier):
     """
     Ermittelt die zugehörige E-Mail-Adresse oder interne Auth-Kennung 
-    direkt aus der 'mitglieder'-Tabelle (E-Mail, Telefonnummer, Mitgliedsnummer).
+    zuerst aus der 'benutzer'-Tabelle (nach Benutzername) und danach aus 'mitglieder'.
     """
     if not identifier:
         return None
         
     identifier_str = str(identifier).strip()
-    print(f"\n--- [DEBUG LOGIN] Suche in 'mitglieder' nach: '{identifier_str}' ---")
+    print(f"\n--- [DEBUG LOGIN] Suche nach: '{identifier_str}' ---")
     
     try:
+        # 0. Zuerst in der 'benutzer'-Tabelle nach dem Benutzernamen suchen (z.B. "admin")
+        res_benutzer = supabase.table("benutzer").select("email, benutzername").ilike("benutzername", identifier_str).maybe_single().execute()
+        if res_benutzer and res_benutzer.data:
+            print("[Debug] Treffer in 'benutzer'-Tabelle via Benutzername!")
+            if res_benutzer.data.get("email"):
+                return res_benutzer.data["email"]
+
         # 1. Suche nach E-Mail (case-insensitive) in 'mitglieder'
         res = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").ilike("email", identifier_str).maybe_single().execute()
         if res and res.data:
@@ -29,7 +36,7 @@ def finde_email_zu_benutzer(identifier):
                     return res.data["email"]
                 return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
 
-        # 3. Flexible Telefonnummern-Suche in 'mitglieder' (ignoriert Formatierung wie Leerzeichen/Bindestriche)
+        # 3. Flexible Telefonnummern-Suche in 'mitglieder'
         res_tel = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").not_.is_("telefonnummer", "null").execute()
         if res_tel and res_tel.data:
             clean_input = "".join(filter(str.isdigit, identifier_str))
@@ -45,7 +52,7 @@ def finde_email_zu_benutzer(identifier):
                             return f"{row['mitgliedsnummer']}@krayfueralle.intern"
 
     except Exception as e:
-        print(f"[Debug] Fehler bei der Suche in 'mitglieder': {e}")
+        print(f"[Debug] Fehler bei der Suche: {e}")
         
     print("[Debug] --- NICHT GEFUNDEN ---")
     return None
