@@ -173,14 +173,15 @@ def show():
             except Exception:
                 naechste_nr = "1"
 
+            # Checkbox AUSSERHALB des Forms platziert, damit ein Klick sofort das Layout aktualisiert
+            auto_nr_aktiv = str_alias.checkbox("Mitgliedsnummer automatisch vergeben (ab 1)", value=True, key="auto_nr_checkbox")
+
             with str_alias.form("neues_mitglied_form"):
-                auto_nr_aktiv = str_alias.checkbox("Mitgliedsnummer automatisch vergeben (ab 1)", value=True)
-                
                 if auto_nr_aktiv:
-                    mitgliedsnummer = str_alias.text_input("Mitgliedsnummer (automatisch)", value=naechste_nr, disabled=True)
+                    str_alias.text_input("Mitgliedsnummer (automatisch)", value=naechste_nr, disabled=True, key="mitgliedsnummer_auto_display")
                     final_mitgliedsnummer = naechste_nr
                 else:
-                    final_mitgliedsnummer = str_alias.text_input("Mitgliedsnummer (manuell)", value=naechste_nr)
+                    final_mitgliedsnummer = str_alias.text_input("Mitgliedsnummer (manuell eingeben)", value=naechste_nr, key="mitgliedsnummer_manuell_input")
 
                 col1, col2 = str_alias.columns(2)
                 with col1:
