@@ -6,7 +6,28 @@ import matplotlib.pyplot as plt
 from fpdf import FPDF
 
 def show():
-    st.header("💰 Finanzen, Kassenbuch & Beitragsverwaltung")
+    # --- MOBILE OPTIMIERUNG (CSS INJECTION) ---
+    st.markdown("""
+        <style>
+        /* Anpassungen für kleinere Bildschirme (Handys & Tablets) */
+        @media (max-width: 768px) {
+            .block-container {
+                padding-top: 1rem;
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+            }
+            /* Metriken kompakter machen auf dem Handy */
+            div[data-testid="stMetricValue"] {
+                font-size: 1.2rem !important;
+            }
+            h1 { font-size: 1.4rem !important; }
+            h2 { font-size: 1.2rem !important; }
+            h3 { font-size: 1.1rem !important; }
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.header("💰 Finanzen & Kassenbuch")
     
     # 1. Rechteprüfung (Nur Admin, Vorstand, Kassenwart)
     user_rolle = st.session_state.get("user_rolle", "").lower()
@@ -16,13 +37,13 @@ def show():
         st.error("⛔ Zugriff verweigert. Dieser Bereich ist nur für Admin, Vorstand und Kassenwart zugänglich.")
         return
 
-    # Tabs definieren (inkl. dem neuen Beitrags-Tab)
+    # Tabs definieren
     tab_buchungen, tab_neu, tab_beitraege, tab_statistik, tab_pdf = st.tabs([
-        "📖 Kassenbuch & Übersicht", 
-        "➕ Buchung erfassen", 
-        "🏷️ Beiträge & Zahlungsstatus",
-        "📊 Diagramme & Analyse", 
-        "📄 PDF-Export"
+        "📖 Kassenbuch", 
+        "➕ Neu", 
+        "🏷️ Beiträge",
+        "📊 Statistik", 
+        "📄 PDF"
     ])
 
     # Daten aus Supabase laden
@@ -42,10 +63,11 @@ def show():
         df["betrag"] = pd.to_numeric(df["betrag"])
 
     # ==========================================
-    # GLOBALER KONTOSTAND & FILTER (Monat / Jahr)
+    # GLOBALER KONTOSTAND & FILTER (Sidebar)
     # ==========================================
     st.sidebar.divider()
-    st.sidebar.subheader("📅 Finanz-Filter")
+    st.sidebar.subheader("📅 Finanz-Filter & Info")
+    st.sidebar.caption("📱 *Hinweis für Handy-Nutzer: Die Filter findest du immer hier in der linken Seitenleiste (Pfeil oben links).*")
     
     # Allzeit-Kontostand berechnen
     if not df.empty:
@@ -55,7 +77,7 @@ def show():
     else:
         kontostand_gesamt = 0.0
 
-    st.sidebar.metric("💳 Ist-Stand Konto (Gesamt)", f"{kontostand_gesamt:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+    st.sidebar.metric("💳 Ist-Stand Konto", f"{kontostand_gesamt:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
 
     verfügbare_jahre = sorted(df["jahr"].unique().tolist(), reverse=True) if not df.empty else [datetime.today().year]
     if datetime.today().year not in verfügbare_jahre:
@@ -83,7 +105,7 @@ def show():
     # TAB 1: KASSENBUCH & ÜBERSICHT
     # ==========================================
     with tab_buchungen:
-        st.subheader(f"Buchungsübersicht ({wahl_monat_name} {wahl_jahr})")
+        st.subheader(f"Übersicht ({wahl_monat_name} {wahl_jahr})")
         
         if not df_filtered.empty:
             f_einnahmen = df_filtered[df_filtered["typ"] == "Einnahme"]["betrag"].sum()
@@ -91,14 +113,14 @@ def show():
             f_saldo = f_einnahmen - f_ausgaben
 
             col1, col2, col3 = st.columns(3)
-            col1.metric("Einnahmen (Filter)", f"{f_einnahmen:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
-            col2.metric("Ausgaben (Filter)", f"{f_ausgaben:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
-            col3.metric("Saldo (Filter)", f"{f_saldo:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+            col1.metric("Einnahmen", f"{f_einnahmen:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+            col2.metric("Ausgaben", f"{f_ausgaben:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+            col3.metric("Saldo", f"{f_saldo:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
             
             st.divider()
 
-            df_anzeige = df_filtered[["buchungs_datum", "typ", "betrag", "kategorie", "person", "verwendungszweck", "entgegengenommen_von"]].copy()
-            df_anzeige["buchungs_datum"] = df_anzeige["buchungs_datum"].dt.strftime("%d/%m/%Y")
+            df_anzeige = df_filtered[["buchungs_datum", "typ", "betrag", "kategorie", "person", "verwendungszweck"]].copy()
+            df_anzeige["buchungs_datum"] = df_anzeige["buchungs_datum"].dt.strftime("%d.%m.%Y")
             df_anzeige["betrag"] = df_anzeige["betrag"].map(lambda x: f"{x:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
             
             st.dataframe(
@@ -109,9 +131,8 @@ def show():
                     "typ": "Typ",
                     "betrag": "Betrag",
                     "kategorie": "Kategorie",
-                    "person": "Person / Mitglied",
-                    "verwendungszweck": "Verwendungszweck",
-                    "entgegengenommen_von": "Erfasst von"
+                    "person": "Person",
+                    "verwendungszweck": "Zweck"
                 },
                 hide_index=True
             )
@@ -122,9 +143,8 @@ def show():
     # TAB 2: BUCHUNG ERFASSEN
     # ==========================================
     with tab_neu:
-        st.subheader("Neue Einnahme oder Ausgabe eintragen")
+        st.subheader("Neue Buchung")
         
-        # Mitglieder für Dropdown laden
         try:
             m_res = supabase.table("mitglieder").select("id, vorname, nachname, mitgliedsnummer").execute()
             mitglieder_liste = m_res.data if m_res.data else []
@@ -134,36 +154,33 @@ def show():
         mitglied_optionen = {f"{m['vorname']} {m['nachname']} (Nr: {m.get('mitgliedsnummer', 'N/A')})": m['id'] for m in mitglieder_liste}
         
         with st.form("kassenbuch_form"):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                buchungs_datum = st.date_input("Buchungsdatum", value=datetime.today())
-                typ = st.selectbox("Buchungstyp", ["Einnahme", "Ausgabe"])
-                betrag = st.number_input("Betrag in €", min_value=0.01, step=1.00, format="%.2f")
-                kategorie = st.selectbox("Kategorie", [
-                    "Mitgliedsbeitrag", "Spende", "Veranstaltung", "Material & Equipment", 
-                    "Miete & Nebenkosten", "Gebühren & Bank", "Sonstige Einnahmen", "Sonstige Ausgaben"
-                ])
-            with col_b:
-                is_mitglied_zuordnung = starten_mit = st.checkbox("Mitglied zuordnen?", value=(kategorie == "Mitgliedsbeitrag"))
-                
-                selected_mitglied_id = None
-                person_name = ""
-                
-                if mitglied_optionen and is_mitglied_zuordnung:
-                    wahl_m = st.selectbox("Mitglied auswählen", list(mitglied_optionen.keys()))
-                    selected_mitglied_id = mitglied_optionen[wahl_m]
-                    # Namen automatisch ermitteln
-                    m_data = next((m for m in mitglieder_liste if m['id'] == selected_mitglied_id), None)
-                    if m_data:
-                        person_name = f"{m_data['vorname']} {m_data['nachname']}"
-                else:
-                    person_name = st.text_input("Name der Person / Firma *")
+            buchungs_datum = st.date_input("Buchungsdatum", value=datetime.today(), format="DD.MM.YYYY")
+            typ = st.selectbox("Buchungstyp", ["Einnahme", "Ausgabe"])
+            betrag = st.number_input("Betrag in €", min_value=0.01, step=1.00, format="%.2f")
+            kategorie = st.selectbox("Kategorie", [
+                "Mitgliedsbeitrag", "Spende", "Veranstaltung", "Material & Equipment", 
+                "Miete & Nebenkosten", "Gebühren & Bank", "Sonstige Einnahmen", "Sonstige Ausgaben"
+            ])
+            
+            is_mitglied_zuordnung = st.checkbox("Mitglied zuordnen?", value=(kategorie == "Mitgliedsbeitrag"))
+            
+            selected_mitglied_id = None
+            person_name = ""
+            
+            if mitglied_optionen and is_mitglied_zuordnung:
+                wahl_m = st.selectbox("Mitglied auswählen", list(mitglied_optionen.keys()))
+                selected_mitglied_id = mitglied_optionen[wahl_m]
+                m_data = next((m for m in mitglieder_liste if m['id'] == selected_mitglied_id), None)
+                if m_data:
+                    person_name = f"{m_data['vorname']} {m_data['nachname']}"
+            else:
+                person_name = st.text_input("Name der Person / Firma *")
 
-                verwendungszweck = st.text_area("Verwendungszweck / Bemerkung")
-                entgegengenommen_von = st.text_input("Entgegengenommen / Gebucht von *", value=st.session_state.get("vorname", "Vorstand"))
-                beitrags_zeitraum = st.text_input("Beitragszeitraum (z.B. Jahr 2026)", value=wahl_jahr)
+            verwendungszweck = st.text_input("Verwendungszweck / Bemerkung")
+            entgegengenommen_von = st.text_input("Gebucht von *", value=st.session_state.get("vorname", "Vorstand"))
+            beitrags_zeitraum = st.text_input("Beitragszeitraum (z.B. 2026)", value=wahl_jahr)
 
-            submitted = st.form_submit_button("Buchung speichern", type="primary")
+            submitted = st.form_submit_button("Buchung speichern", type="primary", use_container_width=True)
             
             if submitted:
                 if not person_name:
@@ -183,62 +200,47 @@ def show():
                     }
                     try:
                         supabase.table("kassenbuch").insert(neue_buchung).execute()
-                        st.success(f"Buchung über {betrag:.2f} € erfolgreich gespeichert!")
+                        st.success(f"Buchung über {betrag:.2f} € gespeichert!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Fehler beim Speichern in Supabase: {e}")
+                        st.error(f"Fehler: {e}")
 
     # ==========================================
     # TAB 3: BEITRÄGE & ZAHLUNGSSTATUS
     # ==========================================
     with tab_beitraege:
-        st.subheader(f"🏷️ Beitragsätze & Zahlungsstatus für das Jahr {wahl_jahr}")
+        st.subheader(f"Beiträge {wahl_jahr}")
         
-        # 1. Beitragssätze verwalten
-        with st.expander("⚙️ Beitragssätze konfigurieren (Preise festlegen)"):
+        with st.expander("⚙️ Beitragssätze konfigurieren"):
             try:
                 b_res = supabase.table("beitragssaetze").select("*").execute()
                 saetze = b_res.data if b_res.data else []
             except:
                 saetze = []
 
-            # Anzeige der aktuellen Sätze
             if saetze:
                 df_saetze = pd.DataFrame(saetze)
                 st.dataframe(df_saetze[["typ", "betrag"]], hide_index=True, use_container_width=True)
-            else:
-                st.info("Noch keine Beitragssätze hinterlegt.")
 
-            # Neuen Satz hinzufügen oder aktualisieren
             with st.form("satz_form"):
-                st.markdown("**Beitragssatz hinzufügen oder aktualisieren**")
-                s_typ = st.text_input("Bezeichnung (z.B. Vollmitglied, Ermäßigt, Passiv)")
+                s_typ = st.text_input("Bezeichnung (z.B. Vollmitglied)")
                 s_betrag = st.number_input("Betrag in €", min_value=0.0, step=5.0)
-                s_submit = st.form_submit_button("Beitragssatz speichern")
-                
-                if s_submit and s_typ:
+                if st.form_submit_button("Satz speichern", use_container_width=True) and s_typ:
                     try:
-                        # Upsert über den eindeutigen Key 'typ'
-                        supabase.table("beitragssaetze").upsert({
-                            "typ": s_typ.strip(),
-                            "betrag": float(s_betrag)
-                        }, on_conflict="typ").execute()
-                        st.success(f"Beitragssatz '{s_typ}' erfolgreich gespeichert!")
+                        supabase.table("beitragssaetze").upsert({"typ": s_typ.strip(), "betrag": float(s_betrag)}, on_conflict="typ").execute()
+                        st.success("Gespeichert!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Fehler beim Speichern des Satzes: {e}")
+                        st.error(f"Fehler: {e}")
 
         st.divider()
-        st.subheader(f"📋 Wer hat für das Jahr {wahl_jahr} bezahlt?")
 
-        # Alle Mitglieder laden
         try:
-            mitglieder_res = supabase.table("mitglieder").select("id, vorname, nachname, mitgliedsnummer, rolle").execute()
+            mitglieder_res = supabase.table("mitglieder").select("id, vorname, nachname, mitgliedsnummer").execute()
             alle_mitglieder = mitglieder_res.data if mitglieder_res.data else []
         except:
             alle_mitglieder = []
 
-        # Alle Kassenbuch-Zahlungen für den Beitragszeitraum laden
         try:
             kb_beitraege = supabase.table("kassenbuch").select("*").eq("kategorie", "Mitgliedsbeitrag").execute()
             zahlungen_liste = kb_beitraege.data if kb_beitraege.data else []
@@ -247,71 +249,53 @@ def show():
 
         if alle_mitglieder:
             status_daten = []
-            
             for m in alle_mitglieder:
                 m_id = m["id"]
                 m_name = f"{m['vorname']} {m['nachname']}"
                 m_nr = m.get("mitgliedsnummer", "-")
                 
-                # Prüfen, ob für dieses Mitglied im gewählten Jahr eine Beitragszahlung existiert
                 bezahlt_eintrag = next((z for z in zahlungen_liste if z.get("mitglied_id") == m_id and str(wahl_jahr) in str(z.get("beitrags_zeitraum", ""))), None)
                 
                 if bezahlt_eintrag:
-                    status = "✅ Bezahlten"
+                    status = "✅ Bezahlt"
                     betrag_bezahlt = bezahlt_eintrag["betrag"]
-                    datum_bezahlt = bezahlt_bezahlt_datum = bezahlt_eintrag["buchungs_datum"]
                 else:
                     status = "❌ Offen"
                     betrag_bezahlt = 0.0
-                    datum_bezahlt = "-"
 
                 status_daten.append({
                     "id": m_id,
-                    "Mitglieds-Nr": m_nr,
+                    "Nr": m_nr,
                     "Name": m_name,
                     "Status": status,
-                    "Bezahlter Betrag": f"{betrag_bezahlt:,.2f} €" if betrag_bezahlt > 0 else "-",
-                    "Zahlungsdatum": datum_bezahlt
+                    "Betrag": f"{betrag_bezahlt:,.2f} €" if betrag_bezahlt > 0 else "-"
                 })
 
             df_status = pd.DataFrame(status_daten)
             
-            # Kennzahlen oben anzeigen
-            anzahl_gesamt = len(df_status)
-            anzahl_bezahlt = len(df_status[df_status["Status"].str.contains("Bezahlt")])
-            anzahl_offen = anzahl_gesamt - anzahl_bezahlt
-
             c1, c2, c3 = st.columns(3)
-            c1.metric("Mitglieder gesamt", anzahl_gesamt)
-            c2.metric("Beitrag bezahlt", anzahl_bezahlt, delta_color="normal")
-            c3.metric("Ausstehend (Offen)", anzahl_offen, delta_color="inverse")
+            c1.metric("Gesamt", len(df_status))
+            c2.metric("Bezahlt", len(df_status[df_status["Status"].str.contains("Bezahlt")]))
+            c3.metric("Offen", len(df_status[df_status["Status"].str.contains("Offen")]))
 
-            st.dataframe(df_status[["Mitglieds-Nr", "Name", "Status", "Bezahlter Betrag", "Zahlungsdatum"]], use_container_width=True, hide_index=True)
+            st.dataframe(df_status[["Nr", "Name", "Status", "Betrag"]], use_container_width=True, hide_index=True)
 
-            st.markdown("### ⚡ Schnell-Erfassung: Mitglied als 'Bezahlt' markieren")
+            st.markdown("### ⚡ Schnell-Buchung")
             with st.form("schnell_bezahlt_form"):
-                col_s1, col_s2, col_s3 = st.columns(3)
-                with col_s1:
-                    offene_mitglieder = {f"{m['Name']} (Nr: {m['Mitglieds-Nr']})": m['id'] for m in status_daten if "Offen" in m["Status"]}
-                    if offene_mitglieder:
-                        w_mitglied = st.selectbox("Mitglied (nur Offene)", list(offene_mitglieder.keys()))
-                        ziel_m_id = offene_mitglieder[w_mitglied]
-                    else:
-                        ziel_m_id = None
-                        st.info("Alle Mitglieder haben bezahlt! 🎉")
-                with col_s2:
-                    # Betrag aus Beitragssätzen vorbelegen falls vorhanden
-                    satz_optionen = {s['typ']: s['betrag'] for s in saetze} if saetze else {"Standardbeitrag": 50.0}
-                    w_satz_typ = st.selectbox("Beitragstyp", list(satz_optionen.keys())) if satz_optionen else "Beitrag"
-                    standard_betrag = satz_optionen.get(w_satz_typ, 50.0) if satz_optionen else 50.0
-                    
-                    b_betrag = st.number_input("Betrag in €", value=float(standard_betrag), min_value=0.0)
-                with col_s3:
-                    b_datum = st.date_input("Eingangsdatum", value=datetime.today())
-                    
-                s_b_submit = st.form_submit_button("Beitrag als eingegangen buchen", type="primary")
+                offene_mitglieder = {f"{m['Name']} (Nr: {m['Nr']})": m['id'] for m in status_daten if "Offen" in m["Status"]}
+                if offene_mitglieder:
+                    w_mitglied = st.selectbox("Mitglied (Offen)", list(offene_mitglieder.keys()))
+                    ziel_m_id = offene_mitglieder[w_mitglied]
+                else:
+                    ziel_m_id = None
+                    st.info("Alle haben bezahlt! 🎉")
                 
-                if s_b_submit and ziel_m_id:
+                satz_optionen = {s['typ']: s['betrag'] for s in saetze} if saetze else {"Standard": 50.0}
+                w_satz_typ = st.selectbox("Beitragstyp", list(satz_optionen.keys())) if satz_optionen else "Beitrag"
+                b_betrag = st.number_input("Betrag in €", value=float(satz_optionen.get(w_satz_typ, 50.0)), min_value=0.0)
+                b_datum = st.date_input("Datum", value=datetime.today(), format="DD.MM.YYYY")
+                
+                if st.form_submit_button("Als bezahlt eintragen", type="primary", use_container_width=True) and ziel_m_id:
                     m_info = next((m for m in alle_mitglieder if m["id"] == ziel_m_id), None)
                     m_voller_name = f"{m_info['vorname']} {m_info['nachname']}" if m_info else "Mitglied"
                     
@@ -329,130 +313,91 @@ def show():
                     }
                     try:
                         supabase.table("kassenbuch").insert(neue_einnahme).execute()
-                        st.success(f"Beitrag für {m_voller_name} erfolgreich verbucht!")
+                        st.success("Verbucht!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Fehler beim Verbuchen: {e}")
-        else:
-            st.info("Keine Mitglieder in der Datenbank gefunden.")
+                        st.error(f"Fehler: {e}")
 
     # ==========================================
     # TAB 4: DIAGRAMME & ANALYSE
     # ==========================================
     with tab_statistik:
-        st.subheader("📊 Finanzstatistiken & Diagramme")
-        
+        st.subheader("📊 Statistik")
         if not df_filtered.empty:
-            diag_typ = st.selectbox("Diagramm-Typ wählen", ["Balkendiagramm (Einnahmen vs. Ausgaben)", "Kreisdiagramm (Kategorien)", "Liniendiagramm (Verlauf)"])
+            diag_typ = st.selectbox("Diagramm", ["Balken (Einnahmen/Ausgaben)", "Kreis (Kategorien)", "Linie (Verlauf)"])
+            fig, ax = plt.subplots(figsize=(7, 4))
             
-            fig, ax = plt.subplots(figsize=(9, 5))
-            
-            if "Balkendiagramm" in diag_typ:
-                summen = df_filtered.groupby("typ")["betrag"].sum()
-                summen.plot(kind="bar", ax=ax, color=["#2ca02c", "#d62728"], edgecolor="black")
-                ax.set_title(f"Einnahmen vs. Ausgaben ({wahl_monat_name} {wahl_jahr})")
-                ax.set_ylabel("Euro (€)")
+            if "Balken" in diag_typ:
+                df_filtered.groupby("typ")["betrag"].sum().plot(kind="bar", ax=ax, color=["#2ca02c", "#d62728"])
                 plt.xticks(rotation=0)
-                
-            elif "Kreisdiagramm" in diag_typ:
-                kat_typ = st.radio("Nach welchen Buchungen filtern?", ["Ausgaben", "Einnahmen"])
+            elif "Kreis" in diag_typ:
+                kat_typ = st.radio("Typ", ["Ausgaben", "Einnahmen"], horizontal=True)
                 sub_df = df_filtered[df_filtered["typ"] == ("Ausgabe" if kat_typ == "Ausgaben" else "Einnahme")]
-                
                 if not sub_df.empty:
-                    kat_summen = sub_df.groupby("kategorie")["betrag"].sum()
-                    kat_summen.plot(kind="pie", ax=ax, autopct="%1.1f%%", startangle=90, cmap="Set3")
+                    sub_df.groupby("kategorie")["betrag"].sum().plot(kind="pie", ax=ax, autopct="%1.1f%%", cmap="Set3")
                     ax.set_ylabel("")
-                    ax.set_title(f"{kat_typ}-Verteilung nach Kategorien")
-                else:
-                    st.info("Keine Daten für dieses Kreisdiagramm im gewählten Zeitraum.")
-                    
-            elif "Liniendiagramm" in diag_typ:
+            elif "Linie" in diag_typ:
                 df_sorted = df_filtered.sort_values("buchungs_datum")
                 df_sorted["vorzeichen_betrag"] = df_sorted.apply(lambda row: row["betrag"] if row["typ"] == "Einnahme" else -row["betrag"], axis=1)
                 df_sorted["kumuliert"] = df_sorted["vorzeichen_betrag"].cumsum()
-                
-                ax.plot(df_sorted["buchungs_datum"], df_sorted["kumuliert"], marker="o", linestyle="-", color="#1f77b4")
-                ax.set_title(f"Verlauf des Kassenbestands im gewählten Zeitraum")
-                ax.set_ylabel("Saldo (€)")
+                ax.plot(df_sorted["buchungs_datum"], df_sorted["kumuliert"], marker="o", color="#1f77b4")
                 plt.xticks(rotation=45)
 
             st.pyplot(fig)
         else:
-            st.info("Keine Daten für Diagramme im gewählten Zeitraum vorhanden.")
+            st.info("Keine Daten im Zeitraum.")
 
     # ==========================================
     # TAB 5: PDF-EXPORT
     # ==========================================
     with tab_pdf:
-        st.subheader("📄 Kassenbericht als PDF exportieren")
-        st.markdown(f"Erstelle einen offiziellen Kassenbericht für den Zeitraum: **{wahl_monat_name} {wahl_jahr}**.")
-        
+        st.subheader("📄 Kassenbericht PDF")
         if not df_filtered.empty:
             class KassenPDF(FPDF):
                 def header(self):
-                    self.set_font('helvetica', 'B', 15)
-                    self.cell(0, 10, 'KrayFürAlle e.V. - Offizieller Kassenbericht', 0, 1, 'C')
-                    self.set_font('helvetica', 'I', 10)
-                    self.cell(0, 6, f'Zeitraum: {wahl_monat_name} {wahl_jahr}', 0, 1, 'C')
-                    self.ln(5)
-
+                    self.set_font('helvetica', 'B', 14)
+                    self.cell(0, 10, 'KrayFürAlle e.V. - Kassenbericht', 0, 1, 'C')
+                    self.set_font('helvetica', 'I', 9)
+                    self.cell(0, 5, f'Zeitraum: {wahl_monat_name} {wahl_jahr}', 0, 1, 'C')
+                    self.ln(3)
                 def footer(self):
-                    self.set_y(-15)
+                    self.set_y(-12)
                     self.set_font('helvetica', 'I', 8)
-                    self.cell(0, 10, f'Erstellt am {datetime.today().strftime("%d.%m.%Y")} - Seite {self.page_no()}', 0, 0, 'C')
+                    self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
 
-            def erstelle_kassen_pdf():
+            def erstelle_pdf():
                 pdf = KassenPDF()
                 pdf.add_page()
+                pdf.set_font('helvetica', 'B', 10)
+                pdf.cell(0, 6, f'Kontostand (Gesamt): {kontostand_gesamt:,.2f} EUR', 0, 1)
+                pdf.cell(0, 6, f'Saldo (Filter): {f_saldo:,.2f} EUR', 0, 1)
+                pdf.ln(5)
                 
-                pdf.set_font('helvetica', 'B', 12)
-                pdf.cell(0, 8, '1. Finanzübersicht', 0, 1)
-                pdf.set_font('helvetica', '', 10)
-                pdf.cell(0, 6, f'Gesamter Kontostand (Allzeit): {kontostand_gesamt:,.2f} EUR', 0, 1)
-                pdf.cell(0, 6, f'Einnahmen im Zeitraum: {f_einnahmen:,.2f} EUR', 0, 1)
-                pdf.cell(0, 6, f'Ausgaben im Zeitraum: {f_ausgaben:,.2f} EUR', 0, 1)
-                pdf.cell(0, 6, f'Saldo im Zeitraum: {f_saldo:,.2f} EUR', 0, 1)
-                pdf.ln(8)
-                
-                pdf.set_font('helvetica', 'B', 12)
-                pdf.cell(0, 8, '2. Buchungsdetails', 0, 1)
                 pdf.set_font('helvetica', 'B', 8)
-                
-                pdf.cell(22, 7, 'Datum', 1)
-                pdf.cell(20, 7, 'Typ', 1)
-                pdf.cell(25, 7, 'Betrag', 1)
-                pdf.cell(38, 7, 'Kategorie', 1)
-                pdf.cell(45, 7, 'Person', 1)
-                pdf.cell(40, 7, 'Zweck', 1)
+                pdf.cell(20, 6, 'Datum', 1)
+                pdf.cell(18, 6, 'Typ', 1)
+                pdf.cell(22, 6, 'Betrag', 1)
+                pdf.cell(35, 6, 'Kategorie', 1)
+                pdf.cell(45, 6, 'Person', 1)
                 pdf.ln()
                 
                 pdf.set_font('helvetica', '', 8)
                 for _, row in df_filtered.iterrows():
-                    d_str = row["buchungs_datum"].strftime("%d/%m/%Y")
-                    t_str = str(row["typ"])
-                    b_str = f"{row['betrag']:,.2f} EUR"
-                    k_str = str(row["kategorie"])
-                    p_str = str(row["person"])
-                    z_str = str(row["verwendungszweck"] or "-")
-                    
-                    pdf.cell(22, 6, d_str, 1)
-                    pdf.cell(20, 6, t_str, 1)
-                    pdf.cell(25, 6, b_str, 1)
-                    pdf.cell(38, 6, k_str[:22], 1)
-                    pdf.cell(45, 6, p_str[:26], 1)
-                    pdf.cell(40, 6, z_str[:24], 1)
+                    pdf.cell(20, 5, row["buchungs_datum"].strftime("%d.%m.%Y"), 1)
+                    pdf.cell(18, 5, str(row["typ"]), 1)
+                    pdf.cell(22, 5, f"{row['betrag']:,.2f}", 1)
+                    pdf.cell(35, 5, str(row["kategorie"])[:20], 1)
+                    pdf.cell(45, 5, str(row["person"])[:25], 1)
                     pdf.ln()
-                    
                 return bytes(pdf.output())
 
-            pdf_bytes = erstelle_kassen_pdf()
-            
             st.download_button(
-                label="📥 Kassenbericht-PDF herunterladen",
-                data=pdf_bytes,
+                label="📥 PDF herunterladen",
+                data=erstelle_pdf(),
                 file_name=f"Kassenbericht_{wahl_monat_name}_{wahl_jahr}.pdf",
                 mime="application/pdf",
-                type="primary"
+                type="primary",
+                use_container_width=True
             )
         else:
-            st.warning("Keine Buchungen für den Export im gewählten Zeitraum vorhanden.")
+            st.warning("Keine Daten für den Export vorhanden.")
