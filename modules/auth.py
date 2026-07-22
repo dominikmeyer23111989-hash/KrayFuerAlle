@@ -2,72 +2,53 @@ from database import supabase
 
 def finde_email_zu_benutzer(identifier):
     """
-    Erweiterte Debug-Version zur Fehlersuche beim Telefon-Login.
+    Ermittelt die zugehörige E-Mail-Adresse oder interne Auth-Kennung 
+    zu einem eingegebenen Identifier (E-Mail, Benutzername, Telefonnummer oder Mitgliedsnummer).
     """
-    identifier = str(identifier).strip() 
-    print(f"\n--- [DEBUG LOGIN START] ---")
-    print(f"[Debug] Eingegebener Suchbegriff: '{identifier}' (Länge: {len(identifier)})")
+    if not identifier:
+        return None
+        
+    identifier = str(identifier).strip()
     
-    # 1. SUCHE IN 'BENUTZER'
+    # 1. SUCHE IN 'BENUTZER' (E-Mail case-insensitive oder Benutzername)
     try:
-        res = supabase.table("benutzer").select("email").eq("email", identifier).maybe_single().execute()
+        res = supabase.table("benutzer").select("email").ilike("email", identifier).maybe_single().execute()
         if res and res.data:
-            print(f"[Debug] Treffer in 'benutzer' via E-Mail!")
             return res.data["email"]
 
         res = supabase.table("benutzer").select("email").eq("benutzername", identifier).maybe_single().execute()
         if res and res.data:
-            print(f"[Debug] Treffer in 'benutzer' via Benutzername!")
             return res.data["email"]
     except Exception as e:
         print(f"[Debug] Fehler bei 'benutzer'-Suche: {e}")
         
-    # 2. SUCHE IN 'MITGLIEDER'
-    # Check 3a: Telefonnummer als TEXT
+    # 2. SUCHE IN 'MITGLIEDER' (E-Mail, Telefonnummer, Mitgliedsnummer)
     try:
+        # A) E-Mail (case-insensitive)
+        res = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").ilike("email", identifier).maybe_single().execute()
+        if res and res.data:
+            if res.data.get("email"): 
+                return res.data["email"]
+            return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
+
+        # B) Mitgliedsnummer (wenn numerisch)
+        if identifier.isdigit():
+            res = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").eq("mitgliedsnummer", int(identifier)).maybe_single().execute()
+            if res and res.data:
+                if res.data.get("email"): 
+                    return res.data["email"]
+                return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
+
+        # C) Telefonnummer (Exakter Abgleich)
         res = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").eq("telefonnummer", identifier).maybe_single().execute()
-        print(f"[Debug] Antwort Telefon-Text-Suche: {res}")
         if res and res.data:
-            print(f"[Debug] Treffer in 'mitglieder' via Telefon (Text)! Data: {res.data}")
-            if res.data.get("email"): return res.data["email"]
+            if res.data.get("email"): 
+                return res.data["email"]
             return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
+
     except Exception as e:
-        print(f"[Debug] Fehler bei Telefon-Text-Suche: {e}")
-
-    # Check 3b: Telefonnummer als ZAHL
-    if identifier.isdigit():
-        try:
-            res = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").eq("telefonnummer", int(identifier)).maybe_single().execute()
-            print(f"[Debug] Antwort Telefon-Zahl-Suche: {res}")
-            if res and res.data:
-                print(f"[Debug] Treffer in 'mitglieder' via Telefon (Zahl)! Data: {res.data}")
-                if res.data.get("email"): return res.data["email"]
-                return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
-        except Exception as e:
-            print(f"[Debug] Fehler bei Telefon-Zahl-Suche: {e}")
-
-    # Check 4: E-Mail in mitglieder
-    try:
-        res = supabase.table("mitglieder").select("email, mitgliedsnummer").eq("email", identifier).maybe_single().execute()
-        if res and res.data:
-            print(f"[Debug] Treffer in 'mitglieder' via E-Mail!")
-            if res.data.get("email"): return res.data["email"]
-            return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
-    except Exception as e:
-        print(f"[Debug] Fehler bei Mitglieder-E-Mail-Suche: {e}")
-            
-    # Check 5: Mitgliedsnummer in mitglieder
-    if identifier.isdigit():
-        try:
-            res = supabase.table("mitglieder").select("email, mitgliedsnummer").eq("mitgliedsnummer", int(identifier)).maybe_single().execute()
-            if res and res.data:
-                print(f"[Debug] Treffer in 'mitglieder' via Mitgliedsnummer!")
-                if res.data.get("email"): return res.data["email"]
-                return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
-        except Exception as e:
-            print(f"[Debug] Fehler bei Mitgliedsnummer-Suche: {e}")
-
-    print(f"[Debug] --- LEIDER NICHTS GEFUNDEN --- \n")
+        print(f"[Debug] Fehler bei 'mitglieder'-Suche: {e}")
+        
     return None
 
 def login_user(identifier, password):
@@ -91,11 +72,17 @@ def erstes_passwort_setzen(identifier, password):
     3. Trägt das Mitglied in die 'benutzer'-Tabelle ein.
     """
     try:
-        res = supabase.table("mitglieder").select("*").or_(
-            f"email.eq.{identifier},telefonnummer.eq.{identifier},mitgliedsnummer.eq.{identifier}"
-        ).maybe_single().execute()
+        identifier_str = str(identifier).strip()
         
-        # ABSICHERUNG: Wenn res None ist, wurde nichts gefunden
+        res = None
+        res = supabase.table("mitglieder").select("*").ilike("email", identifier_str).maybe_single().execute()
+        
+        if (not res or not res.data) and identifier_str.isdigit():
+            res = supabase.table("mitglieder").select("*").eq("mitgliedsnummer", int(identifier_str)).maybe_single().execute()
+            
+        if not res or not res.data:
+            res = supabase.table("mitglieder").select("*").eq("telefonnummer", identifier_str).maybe_single().execute()
+        
         if not res or not res.data:
             return False, "Mitgliedsdaten nicht gefunden. Bitte Vorstand kontaktieren."
         
@@ -125,11 +112,17 @@ def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passw
     """
     Prüft die Sicherheitsantwort und setzt das Passwort administrativ zurück.
     """
-    res = supabase.table("mitglieder").select("sicherheitsantwort, mitgliedsnummer, email").or_(
-        f"email.eq.{identifier},telefonnummer.eq.{identifier},mitgliedsnummer.eq.{identifier}"
-    ).maybe_single().execute()
+    identifier_str = str(identifier).strip()
+    res = None
+    try:
+        res = supabase.table("mitglieder").select("sicherheitsantwort, mitgliedsnummer, email").ilike("email", identifier_str).maybe_single().execute()
+        if (not res or not res.data) and identifier_str.isdigit():
+            res = supabase.table("mitglieder").select("sicherheitsantwort, mitgliedsnummer, email").eq("mitgliedsnummer", int(identifier_str)).maybe_single().execute()
+        if not res or not res.data:
+            res = supabase.table("mitglieder").select("sicherheitsantwort, mitgliedsnummer, email").eq("telefonnummer", identifier_str).maybe_single().execute()
+    except Exception:
+        pass
     
-    # ABSICHERUNG: Prüfen ob res existiert, bevor wir auf Daten oder die Antwort zugreifen
     if not res or not res.data or res.data.get("sicherheitsantwort") != antwort:
         return False, "Falsche Antwort oder Benutzer nicht gefunden."
     
