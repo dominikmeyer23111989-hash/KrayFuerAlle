@@ -171,7 +171,6 @@ if not st.session_state.logged_in:
 else:
     st.sidebar.title("🏢 KrayFürAlle e.V.")
     
-    # Vereinslogo direkt in der Sidebar anzeigen
     try:
         st.sidebar.image("KrayFürAlle.jpeg", use_container_width=True)
     except Exception:
@@ -187,7 +186,6 @@ else:
 
     st.sidebar.divider()
     
-    # Navigation dynamisch nach Rolle / Rechten aufbauen
     nav_optionen = [
         "Mitglieder & Rollen", 
         "Mitgliedsausweis", 
@@ -221,7 +219,6 @@ else:
         st.success("Erfolgreich abgemeldet.")
         st.rerun()
 
-    # Seiten aufrufen
     if menue == "Mitglieder & Rollen":
         mitglieder_page.show()
     elif menue == "Mitgliedsausweis":
