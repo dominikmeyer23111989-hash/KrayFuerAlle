@@ -22,10 +22,8 @@ def show():
     has_inventar_rights = st.session_state.get("hat_inventar_rechte", False)
     is_admin_or_vorstand = st.session_state.get("user_rolle", "").lower() in ["admin", "administrator", "vorstand", "kassenwart"]
     
-    # Zugriff haben Admins/Vorstände Oder Personen mit direktem Inventar-Recht
     can_manage_or_lend = has_inventar_rights or is_admin_or_vorstand
     
-    # Tabs dynamisch aufbauen: Nur Admins/Vorstände oder Berechtigte bekommen Ausleihe & Verwaltung
     if can_manage_or_lend:
         tab_uebersicht, tab_ausleihe, tab_verwaltung, tab_reparatur, tab_einstellungen = st.tabs([
             "📋 Inventar-Liste",
@@ -35,7 +33,6 @@ def show():
             "🔔 Einstellungen"
         ])
     else:
-        # Normale Mitglieder ohne Rechte sehen AUSSCHLIESSLICH die Inventar-Liste
         tab_uebersicht = st.tabs(["📋 Inventar-Liste"])[0]
         tab_ausleihe = None
         tab_verwaltung = None
@@ -43,7 +40,7 @@ def show():
         tab_einstellungen = None
 
     # ==========================================
-    # 1. INVENTAR-LISTE (Für jeden sichtbar)
+    # 1. INVENTAR-LISTE
     # ==========================================
     with tab_uebersicht:
         st.subheader("Verfügbare Inventar-Gegenstände")
@@ -78,13 +75,12 @@ def show():
             st.info("Keine Inventar-Gegenstände gefunden.")
 
     # ==========================================
-    # 2. AUSLEIHE & RÜCKGABE (Nur für Berechtigte / Admins)
+    # 2. AUSLEIHE & RÜCKGABE
     # ==========================================
     if can_manage_or_lend and tab_ausleihe is not None:
         with tab_ausleihe:
             sub_tab1, sub_tab2 = st.tabs(["📤 Gegenstand ausleihen", "📥 Aktive Ausleihen & Rückgabe"])
             
-            # --- Ausleihen Formular ---
             with sub_tab1:
                 st.subheader("Neue Ausleihe erfassen")
                 inv_daten = get_alle_inventar()
@@ -103,8 +99,8 @@ def show():
                             person_name = st.text_input("An wen wird verliehen (Name der Person) *")
                             menge = st.number_input("Ausleihmenge", min_value=1, max_value=max_menge, value=1)
                         with col2:
-                            ausleih_datum = st.date_input("Ausleihdatum", value=datetime.today())
-                            rueckgabe_soll = st.date_input("Geplantes Rückgabedatum", value=datetime.today())
+                            ausleih_datum = st.date_input("Ausleihdatum", value=datetime.today(), format="DD/MM/YYYY")
+                            rueckgabe_soll = st.date_input("Geplantes Rückgabedatum", value=datetime.today(), format="DD/MM/YYYY")
                             
                         aktueller_nutzer = st.session_state.get("vorname", "System")
                         st.info(f"ℹ️ Material ausgegeben von: **{aktueller_nutzer}** (wird automatisch dokumentiert)")
@@ -136,7 +132,6 @@ def show():
                 else:
                     st.info("Aktuell sind keine Gegenstände zur Ausleihe verfügbar.")
 
-            # --- Rückgabe / Aktive Ausleihen ---
             with sub_tab2:
                 st.subheader("Aktive Ausleihen zurücknehmen")
                 alle_ausleihen = get_alle_ausleihen()
@@ -161,7 +156,7 @@ def show():
                         
                         col1, col2 = st.columns(2)
                         with col1:
-                            rueckgabe_ist = st.date_input("Tatsächliches Rückgabedatum", value=datetime.today())
+                            rueckgabe_ist = st.date_input("Tatsächliches Rückgabedatum", value=datetime.today(), format="DD/MM/YYYY")
                             rueckgeber_name = st.text_input("Wer bringt das Material zurück? (Name)", value=selected_ausleihe.get('person_name'))
                         with col2:
                             aktueller_nutzer = st.session_state.get("vorname", "System")
@@ -214,7 +209,7 @@ def show():
                     st.info("Es gibt aktuell keine aktiven Ausleihen.")
 
     # ==========================================
-    # 3. INVENTAR PFLEGEN (Nur für Berechtigte / Admins)
+    # 3. INVENTAR PFLEGEN
     # ==========================================
     if can_manage_or_lend and tab_verwaltung is not None:
         with tab_verwaltung:
@@ -231,9 +226,9 @@ def show():
                         inv_defekt = st.number_input("Davon defekt", min_value=0, value=0)
                         inv_charge = st.text_input("Chargennummer")
                     with col2:
-                        inv_anschaffung = st.date_input("Anschaffungsdatum", value=datetime.today())
-                        inv_pruefung = st.date_input("Prüfdatum (Nächste Prüfung)", value=datetime.today())
-                        inv_ablauf = st.date_input("Ablaufdatum (optional)", value=None)
+                        inv_anschaffung = st.date_input("Anschaffungsdatum", value=datetime.today(), format="DD/MM/YYYY")
+                        inv_pruefung = st.date_input("Prüfdatum (Nächste Prüfung)", value=datetime.today(), format="DD/MM/YYYY")
+                        inv_ablauf = st.date_input("Ablaufdatum (optional)", value=None, format="DD/MM/YYYY")
                         inv_beschreibung = st.text_area("Beschreibung / Mängel")
                         
                     save_inv_btn = st.form_submit_button("Inventar-Gegenstand speichern", type="primary")
@@ -284,11 +279,11 @@ def show():
                         with col2:
                             p_str = selected_edit_item.get("pruefdatum")
                             p_val = datetime.strptime(p_str.split("T")[0], "%Y-%m-%d") if p_str else datetime.today()
-                            e_pruefung = st.date_input("Prüfdatum", value=p_val)
+                            e_pruefung = st.date_input("Prüfdatum", value=p_val, format="DD/MM/YYYY")
                             
                             a_str = selected_edit_item.get("ablaufdatum")
                             a_val = datetime.strptime(a_str.split("T")[0], "%Y-%m-%d") if a_str else None
-                            e_ablauf = st.date_input("Ablaufdatum", value=a_val)
+                            e_ablauf = st.date_input("Ablaufdatum", value=a_val, format="DD/MM/YYYY")
                             
                             e_status = st.selectbox("Status", ["Verfügbar", "Ausgeliehen", "Gesperrt", "Defekt"], index=0 if selected_edit_item.get("status") == "Verfügbar" else 1)
                             
@@ -338,7 +333,7 @@ def show():
                     st.info("Keine Gegenstände zum Bearbeiten vorhanden.")
 
     # ==========================================
-    # 4. REPARATUREN & DEFEKTE (Nur für Berechtigte / Admins)
+    # 4. REPARATUREN & DEFEKTE
     # ==========================================
     if can_manage_or_lend and tab_reparatur is not None:
         with tab_reparatur:
@@ -379,7 +374,7 @@ def show():
                 st.success("🎉 Aktuell gibt es keine defekten Gegenstände im Lager. Alles einsatzbereit!")
 
     # ==========================================
-    # 5. EINSTELLUNGEN (Nur für Berechtigte / Admins)
+    # 5. EINSTELLUNGEN
     # ==========================================
     if can_manage_or_lend and tab_einstellungen is not None:
         with tab_einstellungen:
