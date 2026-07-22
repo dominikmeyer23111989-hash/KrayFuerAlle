@@ -83,7 +83,7 @@ def show():
 
     def get_altersgruppe(alter):
         if alter is None:
-            return "Kein Angabe"
+            return "Keine Angabe"
         elif alter <= 12:
             return "0-12 Jahre"
         elif alter <= 18:
@@ -101,7 +101,7 @@ def show():
     with tab_liste:
         st.subheader("Übersicht aller Vereinsmitglieder")
         try:
-            sichere_spalten = "id, mitgliedsnummer, vorname, nachname, geburtsdatum, geschlecht, email, telefonnummer, strasse, plz, ort, beitrittsdatum, rolle, hat_inventar_rechte"
+            sichere_spalten = "id, mitgliedsnummer, vorname, nachname, geburtsdatum, geschlecht, email, telefonnummer, strasse, plz, ort, beitrittsdatum, rolle, status, ist_gesperrt, hat_inventar_rechte"
             res = supabase.table("mitglieder").select(sichere_spalten).execute()
             mitglieder = res.data if res.data else []
             
@@ -143,6 +143,8 @@ def show():
                         "email": "E-Mail",
                         "telefonnummer": "Telefon",
                         "rolle": "Rolle",
+                        "status": "Status",
+                        "ist_gesperrt": "Gesperrt",
                         "hat_inventar_rechte": "Inventar-Rechte",
                         "beitrittsdatum": "Eintritt (DD/MM/YYYY)"
                     },
@@ -203,8 +205,10 @@ def show():
                     beitrittsdatum_obj = datum_auswahl("Eintrittsdatum", "neu_beitritt", datetime.today(), 1900)
                     
                     rolle = st.selectbox("Rolle", ["mitglied", "kassenwart", "vorstand", "admin"])
+                    status = st.selectbox("Status", ["aktiv", "passiv", "ehrenmitglied"])
+                    ist_gesperrt = st.checkbox("Mitglied gesperrt")
                     inventar_rechte = st.checkbox("Spezielle Inventar-Rechte vergeben")
-                    
+                
                 submitted = st.form_submit_button("Mitglied speichern", type="primary")
                 
                 if submitted:
@@ -224,6 +228,8 @@ def show():
                             "ort": ort,
                             "beitrittsdatum": beitrittsdatum_obj.strftime("%Y-%m-%d"),
                             "rolle": rolle,
+                            "status": status,
+                            "ist_gesperrt": ist_gesperrt,
                             "hat_inventar_rechte": inventar_rechte
                         }
                         try:
@@ -286,8 +292,14 @@ def show():
                                     aktuelle_rolle = m_data.get("rolle", "mitglied")
                                     rollen_optionen = ["mitglied", "kassenwart", "vorstand", "admin"]
                                     rollen_index = rollen_optionen.index(aktuelle_rolle) if aktuelle_rolle in rollen_optionen else 0
-                                    
                                     e_rolle = st.selectbox("Rolle", rollen_optionen, index=rollen_index)
+                                    
+                                    aktueller_status = m_data.get("status", "aktiv")
+                                    status_optionen = ["aktiv", "passiv", "ehrenmitglied"]
+                                    status_index = status_optionen.index(aktueller_status) if aktueller_status in status_optionen else 0
+                                    e_status = st.selectbox("Status", status_optionen, index=status_index)
+                                    
+                                    e_gesperrt = st.checkbox("Mitglied gesperrt", value=m_data.get("ist_gesperrt", False))
                                     e_inventar = st.checkbox("Inventar-Rechte", value=m_data.get("hat_inventar_rechte", False))
                                     
                                 col_save, col_del = st.columns(2)
@@ -310,6 +322,8 @@ def show():
                                         "ort": e_ort if e_ort else None,
                                         "beitrittsdatum": e_beitrittsdatum.strftime("%Y-%m-%d"),
                                         "rolle": e_rolle,
+                                        "status": e_status,
+                                        "ist_gesperrt": e_gesperrt,
                                         "hat_inventar_rechte": e_inventar
                                     }
                                     try:
@@ -365,6 +379,7 @@ def show():
                                 e_plz = st.text_input("PLZ", value=m_data.get("plz", "") or "")
                                 e_ort = st.text_input("Ort", value=m_data.get("ort", "") or "")
                                 st.text_input("Rolle (gesperrt)", value=m_data.get("rolle", "mitglied"), disabled=True)
+                                st.text_input("Status (gesperrt)", value=m_data.get("status", "aktiv"), disabled=True)
                                 
                             save_btn = st.form_submit_button("Änderungen speichern", type="primary")
                             
@@ -409,7 +424,7 @@ def show():
                     with col_wahl1:
                         diagramm_typ = st.radio("Diagramm-Typ wählen", ["Balkendiagramm", "Kreisdiagramm"])
                     with col_wahl2:
-                        kategorie_wahl = st.selectbox("Auswertung nach", ["Altersgruppen", "Geschlecht"])
+                        kategorie_wahl = st.selectbox("Auswertung nach", ["Altersgruppen", "Geschlecht", "Status"])
                     
                     st.divider()
                     
@@ -417,10 +432,14 @@ def show():
                         reihenfolge = ["0-12 Jahre", "13-18 Jahre", "18-35 Jahre", "35-65 Jahre", "Über 65 Jahre", "Kein Angabe"]
                         counts = df["altersgruppe"].value_counts().reindex(reihenfolge, fill_value=0)
                         titel = "Altersverteilung der Mitglieder"
-                    else:
+                    elif kategorie_wahl == "Geschlecht":
                         counts = df["geschlecht"].value_counts(dropna=False)
                         counts.index = counts.index.fillna("Keine Angabe")
                         titel = "Geschlechterverteilung der Mitglieder"
+                    else:
+                        counts = df["status"].value_counts(dropna=False)
+                        counts.index = counts.index.fillna("Keine Angabe")
+                        titel = "Mitglieder-Statusverteilung"
 
                     fig, ax = plt.subplots(figsize=(8, 5))
                     if diagramm_typ == "Balkendiagramm":
@@ -479,26 +498,29 @@ def show():
                         pdf.cell(0, 10, '2. Detaillierte Mitgliederliste', 0, 1)
                         pdf.set_font('helvetica', 'B', 9)
                         
-                        pdf.cell(20, 8, 'Nr', 1)
-                        pdf.cell(45, 8, 'Name', 1)
-                        pdf.cell(35, 8, 'Telefon', 1)
-                        pdf.cell(50, 8, 'E-Mail', 1)
-                        pdf.cell(40, 8, 'Rolle', 1)
+                        pdf.cell(15, 8, 'Nr', 1)
+                        pdf.cell(40, 8, 'Name', 1)
+                        pdf.cell(30, 8, 'Status', 1)
+                        pdf.cell(45, 8, 'E-Mail', 1)
+                        pdf.cell(30, 8, 'Rolle', 1)
+                        pdf.cell(30, 8, 'Gesperrt', 1)
                         pdf.ln()
                         
                         pdf.set_font('helvetica', '', 9)
                         for m in daten:
                             nr = str(m.get("mitgliedsnummer", ""))
                             name = f"{m.get('vorname', '')} {m.get('nachname', '')}"
-                            tel = str(m.get("telefonnummer", "") or "")
+                            status = str(m.get("status", "aktiv"))
                             mail = str(m.get("email", "") or "")
                             rolle = str(m.get("rolle", ""))
+                            gesperrt = "Ja" if m.get("ist_gesperrt") else "Nein"
                             
-                            pdf.cell(20, 7, nr, 1)
-                            pdf.cell(45, 7, name[:24], 1)
-                            pdf.cell(35, 7, tel[:18], 1)
-                            pdf.cell(50, 7, mail[:26], 1)
-                            pdf.cell(40, 7, rolle[:20], 1)
+                            pdf.cell(15, 7, nr, 1)
+                            pdf.cell(40, 7, name[:22], 1)
+                            pdf.cell(30, 7, status[:15], 1)
+                            pdf.cell(45, 7, mail[:24], 1)
+                            pdf.cell(30, 7, rolle[:15], 1)
+                            pdf.cell(30, 7, gesperrt, 1)
                             pdf.ln()
                             
                         return bytes(pdf.output())
