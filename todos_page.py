@@ -8,6 +8,17 @@ from modules.todos import (
     todo_loeschen
 )
 
+def formatiere_datum(d_str):
+    """Formatiert ein Datenbank-Datum (YYYY-MM-DD oder Zeitstempel) ins deutsche Format (DD.MM.YYYY)."""
+    if not d_str:
+        return ""
+    try:
+        s = str(d_str)[:10]
+        dt = datetime.strptime(s, "%Y-%m-%d")
+        return dt.strftime("%d.%m.%Y")
+    except Exception:
+        return d_str
+
 def show():
     st.header("📋 Aufgaben & To-Dos")
     
@@ -58,16 +69,19 @@ def show():
                         m_info = t.get("zugewiesener")
                         zugewiesen_name = f"{m_info.get('vorname', '')} {m_info.get('nachname', '')}"
 
+                    deadline_formatiert = formatiere_datum(t.get('deadline'))
+                    erstellt_am_formatiert = formatiere_datum(t.get('created_at'))
+
                     with st.expander(f"{status_icon} [{status}] {titel} (Für: {zugewiesen_name})"):
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.write(f"**Deadline:** {t.get('deadline', 'Keine')}")
+                            st.write(f"**Deadline:** {deadline_formatiert if t.get('deadline') else 'Keine'}")
                             st.write(f"**Zugewiesen an:** {zugewiesen_name}")
                         with col2:
                             ersteller_id = t.get("erstellt_von")
                             ersteller_name = mitglieder_map.get(ersteller_id, "Unbekannt")
                             st.write(f"**Erstellt von:** {ersteller_name}")
-                            st.write(f"**Erstellt am:** {str(t.get('created_at'))[:10] if t.get('created_at') else '-'}")
+                            st.write(f"**Erstellt am:** {erstellt_am_formatiert if t.get('created_at') else '-'}")
                             
                         if t.get("beschreibung"):
                             st.info(f"**Beschreibung:** {t.get('beschreibung')}")
@@ -115,7 +129,7 @@ def show():
                                     except:
                                         d_val = datetime.today().date()
                                         
-                                    e_deadline = st.date_input("Deadline", value=d_val)
+                                    e_deadline = st.date_input("Deadline", value=d_val, format="DD.MM.YYYY")
                                     
                                     col_up, col_del = st.columns(2)
                                     with col_up:
@@ -166,7 +180,7 @@ def show():
                 format_func=lambda x: "Niemand (Offen für alle)" if x is None else mitglieder_map.get(x, str(x))
             )
             
-            t_deadline = st.date_input("Deadline (optional)", value=datetime.today())
+            t_deadline = st.date_input("Deadline (optional)", value=datetime.today(), format="DD.MM.YYYY")
             
             sub_erstellen = st.form_submit_button("Aufgabe erstellen", type="primary")
             if sub_erstellen:
