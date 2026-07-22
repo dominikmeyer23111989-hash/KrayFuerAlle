@@ -2,29 +2,34 @@ from database import supabase
 from datetime import datetime
 
 def formatiere_datum_fuer_db(datum_str):
-    """Wandelt 'DD.MM.YYYY' oder Date-Objekte in 'YYYY-MM-DD' für Supabase um."""
+    """Wandelt verschiedene Datumsformate in 'YYYY-MM-DD' für Supabase um."""
     if not datum_str or not str(datum_str).strip():
         return None
     
     if isinstance(datum_str, datetime) or hasattr(datum_str, "strftime"):
         return datum_str.strftime("%Y-%m-%d")
         
-    try:
-        return datetime.strptime(str(datum_str).strip(), "%d.%m.%Y").strftime("%Y-%m-%d")
-    except ValueError:
+    s = str(datum_str).strip()
+    for fmt in ("%d.%m.%Y", "%d/%m/%Y", "%Y-%m-%d", "%Y/%m/%d"):
         try:
-            return datetime.strptime(str(datum_str).strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
         except ValueError:
-            return None
+            continue
+    return None
 
 def formatiere_datum_fuer_anzeige(datum_str):
-    """Wandelt 'YYYY-MM-DD' aus Supabase in 'DD.MM.YYYY' für die UI um."""
+    """Wandelt Daten aus Supabase in 'DD/MM/YYYY' für die UI um."""
     if not datum_str:
         return ""
         
     try:
         s = str(datum_str).split("T")[0].split(" ")[0]
-        return datetime.strptime(s, "%Y-%m-%d").strftime("%d.%m.%Y")
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d.%m.%Y", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(s, fmt).strftime("%d/%m/%Y")
+            except ValueError:
+                continue
+        return str(datum_str)
     except (ValueError, TypeError):
         return str(datum_str)
 
@@ -33,10 +38,15 @@ def formatiere_datum_fuer_anzeige(datum_str):
 # ==========================================
 
 def get_alle_inventar():
-    """Holt alle Inventar-Gegenstände sortiert nach Namen."""
+    """Holt alle Inventar-Gegenstände sortiert nach Namen und formatiert Datumsfelder für die Anzeige."""
     try:
         response = supabase.table("inventar").select("*").order("name").execute()
-        return response.data if response.data else []
+        daten = response.data if response.data else []
+        for item in daten:
+            for feld in ["ablaufdatum", "anschaffungs_datum", "pruefdatum"]:
+                if feld in item and item[feld]:
+                    item[feld] = formatiere_datum_fuer_anzeige(item[feld])
+        return daten
     except Exception as e:
         print(f"Fehler beim Laden des Inventars: {e}")
         return []
@@ -78,10 +88,15 @@ def inventar_loeschen(inventar_id):
 # ==========================================
 
 def get_alle_ausleihen():
-    """Holt alle Ausleihen inkl. Verknüpfung zu den Inventar-Details."""
+    """Holt alle Ausleihen inkl. Verknüpfung zu den Inventar-Details und formatiert die Daten."""
     try:
         response = supabase.table("ausleihen").select("*, inventar(name, lagerort)").order("created_at", desc=True).execute()
-        return response.data if response.data else []
+        daten = response.data if response.data else []
+        for item in daten:
+            for feld in ["ausleih_datum", "rueckgabe_soll", "rueckgabe_ist"]:
+                if feld in item and item[feld]:
+                    item[feld] = formatiere_datum_fuer_anzeige(item[feld])
+        return daten
     except Exception as e:
         print(f"Fehler beim Laden der Ausleihen: {e}")
         return []
@@ -130,10 +145,8 @@ def ausleihe_zuruecknehmen(ausleihe_id, rueckgabe_daten, menge_defekt_bei_rueckg
         inventar_id = ausl_data.get("inventar_id")
         ausgeleihene_menge = ausl_data.get("menge", 1)
         
-        # Ausleihe-Datensatz aktualisieren
         res = supabase.table("ausleihen").update(rueckgabe_daten).eq("id", ausleihe_id).execute()
         
-        # Inventar-Bestand anpassen (Ganze vs. beschädigte Menge)
         if inventar_id:
             inv_res = supabase.table("inventar").select("menge_gesamt, menge_verfuegbar, menge_defekt").eq("id", inventar_id).single().execute()
             if inv_res.data:
@@ -142,11 +155,9 @@ def ausleihe_zuruecknehmen(ausleihe_id, rueckgabe_daten, menge_defekt_bei_rueckg
                 verfuegbar = inv.get("menge_verfuegbar", 0)
                 defekt = inv.get("menge_defekt", 0)
                 
-                # Aufteilung der zurückkommenden Menge
                 menge_ganz_zurueck = max(0, ausgeleihene_menge - menge_defekt_bei_rueckgabe)
                 neue_defekt = defekt + menge_defekt_bei_rueckgabe
                 
-                # Verfügbare Menge erhöhen (darf Gesamt minus neuen Defekt nicht überschreiten)
                 max_erlaubt_verfuegbar = max(0, gesamt - neue_defekt)
                 neue_verfuegbar = min(max_erlaubt_verfuegbar, verfuegbar + menge_ganz_zurueck)
                 
