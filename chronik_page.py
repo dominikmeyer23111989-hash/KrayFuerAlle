@@ -1,9 +1,8 @@
 import streamlit as st
 from datetime import datetime
-from chronik import get_chronik_eintraege, chronik_erstellen, chronik_loeschen
+from modules.chronik import get_chronik_eintraege, chronik_erstellen, chronik_loeschen
 
 def show():
-    # --- MOBILE OPTIMIERUNG ---
     st.markdown("""
         <style>
         @media (max-width: 768px) {
@@ -25,20 +24,17 @@ def show():
     user_rolle = st.session_state.get("user_rolle", "").lower()
     ist_admin = user_rolle in ["admin", "administrator", "vorstand"]
 
-    # Tabs: Ansicht vs. Eintrag hinzufügen (nur für Admin/Vorstand)
     if ist_admin:
         tab_ansicht, tab_neu = st.tabs(["📖 Chronik ansehen", "➕ Eintrag hinzufügen"])
     else:
         tab_ansicht, tab_neu = st.tabs(["📖 Chronik ansehen", None])
 
-    # --- TAB 1: CHRONIK ANZEIGEN ---
     with tab_ansicht:
         st.subheader("Meilensteine unserer Vereinsgeschichte")
         eintraege = get_chronik_eintraege()
 
         if eintraege:
             for eintrag in eintraege:
-                # Datum formatisieren falls vorhanden
                 roh_datum = eintrag.get("datum")
                 if roh_datum:
                     try:
@@ -52,7 +48,6 @@ def show():
                 titel = eintrag.get("titel", "Kein Titel")
                 beschreibung = eintrag.get("beschreibung", "")
 
-                # Schöne Darstellung als Expander oder Info-Box pro Meilenstein
                 with st.expander(f"📌 {formatiertes_datum} — {titel} [{kategorie}]"):
                     st.write(beschreibung)
                     
@@ -67,7 +62,6 @@ def show():
         else:
             st.info("Bisher wurden noch keine Einträge in der Chronik hinterlegt.")
 
-    # --- TAB 2: NEUEN EINTRAG ERSTELLEN ---
     if ist_admin and tab_neu:
         with tab_neu:
             st.subheader("Neuen Meilenstein eintragen")
@@ -78,7 +72,7 @@ def show():
                 kategorie = st.selectbox("Kategorie", [
                     "Gründung", "Meilenstein", "Sportlicher Erfolg", "Veranstaltung", "Umbau / Gelände", "Sonstiges"
                 ])
-                beschreibung = st.text_area("Beschreibung / Geschichte *", placeholder Erzähle die Geschichte zu diesem Ereignis...)
+                beschreibung = st.text_area("Beschreibung / Geschichte *", placeholder="Erzähle die Geschichte zu diesem Ereignis...")
                 erstellt_von = st.session_state.get("vorname", "Vorstand")
 
                 submitted = st.form_submit_button("In Chronik speichern", type="primary", use_container_width=True)
