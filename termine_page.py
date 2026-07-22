@@ -9,6 +9,16 @@ from modules.termine import (
     setze_teilnahme
 )
 
+def formatiere_datum(d_str):
+    """Formatiert ein Datenbank-Datum (YYYY-MM-DD) ins deutsche Format (DD.MM.YYYY)."""
+    if not d_str:
+        return ""
+    try:
+        dt = datetime.strptime(str(d_str), "%Y-%m-%d")
+        return dt.strftime("%d.%m.%Y")
+    except Exception:
+        return d_str
+
 def parse_time(t_str):
     if not t_str:
         return time(0, 0)
@@ -52,10 +62,12 @@ def show():
                     sichtb = t.get("sichtbarkeit", "alle")
                     badge = f" 🔒 [{sichtb.upper()}]" if sichtb != "alle" else ""
                     
-                    with st.expander(f"📌 {t.get('titel')} am {t.get('datum')}{badge}"):
+                    datum_formatiert = formatiere_datum(t.get('datum'))
+                    
+                    with st.expander(f"📌 {t.get('titel')} am {datum_formatiert}{badge}"):
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.write(f"**Datum:** {t.get('datum')}")
+                            st.write(f"**Datum:** {datum_formatiert}")
                             u_von = t.get('uhrzeit_von', '')
                             u_bis = t.get('uhrzeit_bis', '')
                             if u_von or u_bis:
@@ -89,7 +101,7 @@ def show():
                                 setze_teilnahme(t_id, user_id, "kann")
                                 st.success("Zusage gespeichert!")
                                 st.rerun()
-                            if b2.button("❌ Kann nicht", key=f"t_ nicht_{t_id}", use_container_width=True):
+                            if b2.button("❌ Kann nicht", key=f"t_nicht_{t_id}", use_container_width=True):
                                 setze_teilnahme(t_id, user_id, "kann nicht")
                                 st.success("Absage gespeichert!")
                                 st.rerun()
@@ -118,7 +130,7 @@ def show():
                             with st.expander("⚙️ Termin verwalten (Bearbeiten / Löschen)"):
                                 with st.form(f"edit_termin_form_{t.get('id')}"):
                                     et_titel = st.text_input("Titel", value=t.get("titel", ""))
-                                    et_datum = st.date_input("Datum", value=datetime.strptime(t.get("datum"), "%Y-%m-%d") if t.get("datum") else datetime.today())
+                                    et_datum = st.date_input("Datum", value=datetime.strptime(t.get("datum"), "%Y-%m-%d") if t.get("datum") else datetime.today(), format="DD.MM.YYYY")
                                     et_ort = st.text_input("Ort", value=t.get("ort", "") or "")
                                     
                                     col_u1, col_u2 = st.columns(2)
@@ -180,7 +192,7 @@ def show():
             c1, c2 = st.columns(2)
             with c1:
                 t_titel = st.text_input("Titel *")
-                t_datum = st.date_input("Datum *", value=datetime.today())
+                t_datum = st.date_input("Datum *", value=datetime.today(), format="DD.MM.YYYY")
                 t_ort = st.text_input("Ort / Raum")
             with c2:
                 t_von = st.time_input("Uhrzeit von")
@@ -206,14 +218,13 @@ def show():
                         "sichtbarkeit": t_sichtbarkeit,
                         "ort": t_ort if t_ort else None,
                         "beschreibung": t_beschreibung if t_beschreibung else None,
-                        "creator_id": user_id if isinstance(user_id, str) else None # Falls creator_id UUID erwartet
+                        "creator_id": user_id if isinstance(user_id, str) else None
                     }
                     try:
                         termin_erstellen(neuer_termin)
                         st.success("Termin erfolgreich erstellt!")
                         st.rerun()
                     except Exception as e:
-                        # Fallback falls creator_id vom Typ UUID ist und user_id ein BigInt ist
                         try:
                             neuer_termin.pop("creator_id", None)
                             termin_erstellen(neuer_termin)
