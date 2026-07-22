@@ -173,8 +173,8 @@ def show():
                     col1, col2 = st.columns(2)
                     with col1:
                         e_name = st.text_input("Event-Name *")
-                        e_start = st.date_input("Startdatum", value=datetime.today())
-                        e_end = st.date_input("Enddatum", value=datetime.today())
+                        e_start = st.date_input("Startdatum", value=datetime.today(), format="DD.MM.YYYY")
+                        e_end = st.date_input("Enddatum", value=datetime.today(), format="DD.MM.YYYY")
                         e_treffpunkt = st.text_input("Treffpunkt *")
                         e_ort = st.text_input("Ort / Veranstaltungsort *")
                     with col2:
@@ -222,11 +222,11 @@ def show():
                         
                         s_str = sel_ev.get("start_datum")
                         s_val = datetime.strptime(s_str, "%Y-%m-%d") if s_str else datetime.today()
-                        ee_start = st.date_input("Startdatum", value=s_val)
+                        ee_start = st.date_input("Startdatum", value=s_val, format="DD.MM.YYYY")
                         
                         en_str = sel_ev.get("end_datum")
                         en_val = datetime.strptime(en_str, "%Y-%m-%d") if en_str else datetime.today()
-                        ee_end = st.date_input("Enddatum", value=en_val)
+                        ee_end = st.date_input("Enddatum", value=en_val, format="DD.MM.YYYY")
                         
                         ee_treffpunkt = st.text_input("Treffpunkt", value=sel_ev.get("treffpunkt", ""))
                         ee_ort = st.text_input("Ort", value=sel_ev.get("ort", ""))
