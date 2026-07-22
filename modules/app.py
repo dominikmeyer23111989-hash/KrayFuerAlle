@@ -14,7 +14,8 @@ from modules import (
     termine_page, 
     todos_page, 
     dokumente_page, 
-    ausweis_page
+    ausweis_page,
+    chronik_page
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -139,7 +140,7 @@ if not st.session_state.logged_in:
                             st.error(f"Technischer Fehler: {e}")
                     else:
                         st.warning("Bitte gib deine Kennung ein.")
-            
+                
             elif st.session_state.reset_step == 2:
                 st.info(f"**Sicherheitsfrage:** {st.session_state.reset_frage}")
                 antwort_input = st.text_input("Deine Antwort", key="forgot_antwort")
@@ -194,7 +195,8 @@ else:
         "Events & Schichten", 
         "Kalender & Termine",
         "Aufgaben & To-Dos",
-        "Dokumente"
+        "Dokumente",
+        "Chronik"
     ]
     
     erlaubte_rollen_finanzen = ["admin", "administrator", "vorstand", "kassenwart"]
@@ -234,6 +236,8 @@ else:
         todos_page.show()
     elif menue == "Dokumente":
         dokumente_page.show()
+    elif menue == "Chronik":
+        chronik_page.show()
     elif menue == "Finanzen & Kassenbuch":
         finanzen_page.show()
     elif menue == "Adressbuch":
