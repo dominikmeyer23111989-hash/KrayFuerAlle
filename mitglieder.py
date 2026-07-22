@@ -22,15 +22,15 @@ supabase = init_supabase()
 # ==========================================
 
 def get_alle_mitglieder():
-    """Gibt eine Liste aller Mitglieder aus der Supabase-Tabelle zurück (ohne sensible Daten)."""
+    """Gibt eine Liste aller Mitglieder aus der Supabase-Tabelle zurück (inklusive Status und Sperrstatus)."""
     if not supabase:
         st.error("Supabase-Zugangsdaten fehlen in den Streamlit Secrets!")
         return []
     try:
-        # Sensible Spalten bewusst weggelassen!
+        # Alle relevanten Spalten inklusive ist_gesperrt und status abrufen
         response = supabase.table("mitglieder").select(
-            "id, mitgliedsnummer, vorname, nachname, geburtsdatum, geschlecht, email, telefonnummer, strasse, plz, ort, beitrittsdatum, rolle, hat_inventar_rechte"
-        ).execute()
+            "id, mitgliedsnummer, vorname, nachname, geburtsdatum, geschlecht, email, telefonnummer, strasse, plz, ort, beitrittsdatum, rolle, status, ist_gesperrt, hat_inventar_rechte"
+        ).order("nachname").execute()
         return response.data if response.data else []
     except Exception as e:
         st.error(f"Fehler beim Laden der Mitglieder: {e}")
@@ -71,7 +71,7 @@ def mitglied_aktualisieren(mitglied_id, data):
         return False
 
 def mitglied_loeschen(mitglied_id):
-    """Löscht ein Mitglied anhand seiner ID aus der Datenbank."""
+    """Löscht ein Mitglied anhand seiner ID permanent aus der Datenbank."""
     if not supabase:
         return False
     try:
