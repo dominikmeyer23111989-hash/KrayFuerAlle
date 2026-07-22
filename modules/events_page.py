@@ -213,7 +213,7 @@ def show():
                                 st.error(f"Fehler beim Erstellen: {e}")
             else:
                 if events:
-                    event_dict = {f"{ev.get('id')} - {ev.get('name')} ({ev.get('start_datum')})": ev for ev in events}
+                    event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
                     w_event = st.selectbox("Event auswählen", options=list(event_dict.keys()))
                     sel_ev = event_dict[w_event]
                     
@@ -286,7 +286,7 @@ def show():
     with tab_schichten:
         st.subheader("👥 Schichten & Standbetreuung planen")
         if events:
-            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({ev.get('start_datum')})": ev for ev in events}
+            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
             w_ev_s = st.selectbox("Event für Schichten wählen", options=list(event_dict.keys()), key="schicht_ev_sel")
             sel_ev_s = event_dict[w_ev_s]
             
@@ -365,7 +365,7 @@ def show():
     with tab_material:
         st.subheader("📦 Event-Material & Inventarzuordnung")
         if events:
-            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({ev.get('start_datum')})": ev for ev in events}
+            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
             w_ev_m = st.selectbox("Event für Material wählen", options=list(event_dict.keys()), key="mat_ev_sel")
             sel_ev_m = event_dict[w_ev_m]
             
@@ -435,7 +435,7 @@ def show():
         st.markdown("Falls Events nur für bestimmte Mitglieder sichtbar/freigegeben sein sollen, kannst du sie hier zuordnen.")
         
         if events:
-            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({ev.get('start_datum')})": ev for ev in events}
+            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
             w_ev_f = st.selectbox("Event für Freigaben wählen", options=list(event_dict.keys()), key="freigabe_ev_sel")
             sel_ev_f = event_dict[w_ev_f]
             
