@@ -37,13 +37,14 @@ def show():
         st.error("⛔ Zugriff verweigert. Dieser Bereich ist nur für Admin, Vorstand und Kassenwart zugänglich.")
         return
 
-    # Tabs definieren
-    tab_buchungen, tab_neu, tab_beitraege, tab_statistik, tab_pdf = st.tabs([
+    # Tabs definieren (inkl. Logbuch)
+    tab_buchungen, tab_neu, tab_beitraege, tab_statistik, tab_pdf, tab_log = st.tabs([
         "📖 Kassenbuch", 
         "➕ Neu", 
         "🏷️ Beiträge",
         "📊 Statistik", 
-        "📄 PDF"
+        "📄 PDF",
+        "📜 Logbuch"
     ])
 
     # Daten aus Supabase laden
@@ -102,7 +103,7 @@ def show():
             df_filtered = df_filtered[df_filtered["monat"] == wahl_monat]
 
     # ==========================================
-    # TAB 1: KASSENBUCH & ÜBERSICHT
+    # TAB 1: KASSENBUCH & BEARBEITUNG
     # ==========================================
     with tab_buchungen:
         st.subheader(f"Übersicht ({wahl_monat_name} {wahl_jahr})")
@@ -119,12 +120,13 @@ def show():
             
             st.divider()
 
-            df_anzeige = df_filtered[["buchungs_datum", "typ", "betrag", "kategorie", "person", "verwendungszweck"]].copy()
+            df_anzeige = df_filtered[["id", "buchungs_datum", "typ", "betrag", "kategorie", "person", "verwendungszweck", "ist_geaendert", "letzte_aenderung_durch"]].copy()
             df_anzeige["buchungs_datum"] = df_anzeige["buchungs_datum"].dt.strftime("%d.%m.%Y")
             df_anzeige["betrag"] = df_anzeige["betrag"].map(lambda x: f"{x:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+            df_anzeige["status"] = df_anzeige.apply(lambda r: f"⚠️ Bearbeitet von {r['letzte_aenderung_durch']}" if r['ist_geaendert'] else "Original", axis=1)
             
             st.dataframe(
-                df_anzeige,
+                df_anzeige[["buchungs_datum", "typ", "betrag", "kategorie", "person", "verwendungszweck", "status"]],
                 use_container_width=True,
                 column_config={
                     "buchungs_datum": "Datum",
@@ -132,10 +134,90 @@ def show():
                     "betrag": "Betrag",
                     "kategorie": "Kategorie",
                     "person": "Person",
-                    "verwendungszweck": "Zweck"
+                    "verwendungszweck": "Zweck",
+                    "status": "Hinweis"
                 },
                 hide_index=True
             )
+
+            st.divider()
+
+            # --- BEARBEITEN & LÖSCHEN BEREICH ---
+            with st.expander("✏️ Buchung bearbeiten oder 🗑️ löschen"):
+                buchungs_optionen = {
+                    f"[{row['id']}] {row['buchungs_datum'].strftime('%d.%m.%Y')} - {row['typ']} - {row['betrag']}€ - {row['person']} ({row['kategorie']})": row['id']
+                    for _, row in df_filtered.iterrows()
+                }
+                
+                if buchungs_optionen:
+                    ausgewaehlte_label = st.selectbox("Buchung für Bearbeitung/Löschung auswählen", list(buchungs_optionen.keys()))
+                    ausgewaehlte_id = buchungs_optionen[ausgewaehlte_label]
+                    
+                    b_row = df_filtered[df_filtered["id"] == ausgewaehlte_id].iloc[0]
+                    
+                    with st.form("form_bearbeite_buchung"):
+                        e_datum = st.date_input("Datum", value=pd.to_datetime(b_row["buchungs_datum"]), format="DD.MM.YYYY")
+                        e_typ = st.selectbox("Typ", ["Einnahme", "Ausgabe"], index=0 if b_row["typ"]=="Einnahme" else 1)
+                        e_betrag = st.number_input("Betrag in €", value=float(b_row["betrag"]), min_value=0.01, step=1.00, format="%.2f")
+                        e_kategorie = st.selectbox("Kategorie", [
+                            "Mitgliedsbeitrag", "Spende", "Veranstaltung", "Material & Equipment", 
+                            "Miete & Nebenkosten", "Gebühren & Bank", "Sonstige Einnahmen", "Sonstige Ausgaben"
+                        ], index=0 if b_row["kategorie"] not in ["Mitgliedsbeitrag", "Spende", "Veranstaltung", "Material & Equipment", "Miete & Nebenkosten", "Gebühren & Bank", "Sonstige Einnahmen", "Sonstige Ausgaben"] else ["Mitgliedsbeitrag", "Spende", "Veranstaltung", "Material & Equipment", "Miete & Nebenkosten", "Gebühren & Bank", "Sonstige Einnahmen", "Sonstige Ausgaben"].index(b_row["kategorie"]))
+                        e_person = st.text_input("Person / Firma", value=str(b_row["person"]))
+                        e_zweck = st.text_input("Verwendungszweck", value=str(b_row["verwendungszweck"]) if pd.notna(b_row["verwendungszweck"]) else "")
+                        
+                        col_b1, col_b2 = st.columns(2)
+                        btn_speichern = col_b1.form_submit_button("💾 Änderungen speichern", type="primary", use_container_width=True)
+                        btn_loeschen = col_b2.form_submit_button("🗑️ Buchung löschen", type="secondary", use_container_width=True)
+                        
+                        aktueller_user = st.session_state.get("vorname", "Vorstand")
+                        
+                        if btn_speichern:
+                            try:
+                                update_daten = {
+                                    "buchungs_datum": e_datum.strftime("%Y-%m-%d"),
+                                    "typ": e_typ,
+                                    "betrag": float(e_betrag),
+                                    "kategorie": e_kategorie,
+                                    "person": e_person,
+                                    "verwendungszweck": e_zweck if e_zweck else None,
+                                    "ist_geaendert": True,
+                                    "letzte_aenderung_durch": aktueller_user,
+                                    "letzte_aenderung_am": datetime.now().isoformat()
+                                }
+                                supabase.table("kassenbuch").update(update_daten).eq("id", ausgewaehlte_id).execute()
+                                
+                                log_eintrag = {
+                                    "buchung_id": str(ausgewaehlte_id),
+                                    "aktion": "BEARBEITET",
+                                    "details": f"Buchung geändert. Vorher: {b_row['typ']} {b_row['betrag']}€ ({b_row['person']}), Neu: {e_typ} {e_betrag}€ ({e_person})",
+                                    "durchgefuehrt_von": aktueller_user
+                                }
+                                supabase.table("kassenbuch_log").insert(log_eintrag).execute()
+                                
+                                st.success("Buchung aktualisiert und im Logbuch vermerkt!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Fehler: {e}")
+                                
+                        if btn_loeschen:
+                            try:
+                                log_eintrag = {
+                                    "buchung_id": str(ausgewaehlte_id),
+                                    "aktion": "GELÖSCHT",
+                                    "details": f"Gelöschte Buchung: {b_row['typ']} {b_row['betrag']}€ von {b_row['person']} (Zweck: {b_row['verwendungszweck']})",
+                                    "durchgefuehrt_von": aktueller_user
+                                }
+                                supabase.table("kassenbuch_log").insert(log_eintrag).execute()
+                                
+                                supabase.table("kassenbuch").delete().eq("id", ausgewaehlte_id).execute()
+                                
+                                st.success("Buchung wurde gelöscht und im Logbuch dokumentiert.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Fehler: {e}")
+                else:
+                    st.info("Keine Buchungen für den Zeitraum verfügbar.")
         else:
             st.info("Keine Buchungen für den ausgewählten Zeitraum gefunden.")
 
@@ -196,7 +278,8 @@ def show():
                         "entgegengenommen_von": entgegengenommen_von,
                         "erfasst_von_uuid": st.session_state.get("user_id"),
                         "mitglied_id": selected_mitglied_id,
-                        "beitrags_zeitraum": beitrags_zeitraum if beitrags_zeitraum else None
+                        "beitrags_zeitraum": beitrags_zeitraum if beitrags_zeitraum else None,
+                        "ist_geaendert": False
                     }
                     try:
                         supabase.table("kassenbuch").insert(neue_buchung).execute()
@@ -309,7 +392,8 @@ def show():
                         "entgegengenommen_von": st.session_state.get("vorname", "Kassenwart"),
                         "erfasst_von_uuid": st.session_state.get("user_id"),
                         "mitglied_id": ziel_m_id,
-                        "beitrags_zeitraum": str(wahl_jahr)
+                        "beitrags_zeitraum": str(wahl_jahr),
+                        "ist_geaendert": False
                     }
                     try:
                         supabase.table("kassenbuch").insert(neue_einnahme).execute()
@@ -356,7 +440,7 @@ def show():
             class KassenPDF(FPDF):
                 def header(self):
                     self.set_font('helvetica', 'B', 14)
-                    self.cell(0, 10, 'KrayFürAlle e.V. - Kassenbericht', 0, 1, 'C')
+                    self.cell(0, 10, 'Vereins-Kassenbericht', 0, 1, 'C')
                     self.set_font('helvetica', 'I', 9)
                     self.cell(0, 5, f'Zeitraum: {wahl_monat_name} {wahl_jahr}', 0, 1, 'C')
                     self.ln(3)
@@ -401,3 +485,35 @@ def show():
             )
         else:
             st.warning("Keine Daten für den Export vorhanden.")
+
+    # ==========================================
+    # TAB 6: LOGBUCH (REVISIONSSICHERHEIT)
+    # ==========================================
+    with tab_log:
+        st.subheader("📜 Finanz-Logbuch (Änderungen & Löschungen)")
+        st.caption("Hier siehst du lückenlos protokolliert, wer welche Buchung bearbeitet oder gelöscht hat.")
+        
+        try:
+            log_res = supabase.table("kassenbuch_log").select("*").order("erstellt_am", desc=True).execute()
+            log_daten = log_res.data if log_res.data else []
+        except Exception as e:
+            st.error(f"Fehler beim Laden des Logbuchs: {e}")
+            log_daten = []
+            
+        if log_daten:
+            df_log = pd.DataFrame(log_daten)
+            df_log["erstellt_am"] = pd.to_datetime(df_log["erstellt_am"]).dt.strftime("%d.%m.%Y %H:%M:%S")
+            
+            st.dataframe(
+                df_log[["erstellt_am", "aktion", "durchgefuehrt_von", "details"]],
+                use_container_width=True,
+                column_config={
+                    "erstellt_am": "Zeitpunkt",
+                    "aktion": "Aktion",
+                    "durchgefuehrt_von": "Durchgeführt von",
+                    "details": "Details"
+                },
+                hide_index=True
+            )
+        else:
+            st.info("Bisher wurden keine Änderungen oder Löschungen im Kassenbuch vorgenommen.")
