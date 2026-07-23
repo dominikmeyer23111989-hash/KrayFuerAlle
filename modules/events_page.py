@@ -29,6 +29,12 @@ from modules.events import (
 from modules.inventar import get_alle_inventar, formatiere_datum_fuer_anzeige
 from database import supabase
 
+def safe_val(d, key, fallback=""):
+    """Sicherer Dictionary-Lookup, der auch None-Werte zuverlässig abfängt."""
+    if not d or key not in d or d[key] is None:
+        return fallback
+    return d[key]
+
 def get_alle_mitglieder():
     try:
         res = supabase.table("mitglieder").select("id, vorname, nachname, rolle, email").execute()
@@ -42,7 +48,9 @@ def get_kontakte_fuer_auswahl():
         res_m = supabase.table("mitglieder").select("vorname, nachname").execute()
         if res_m.data:
             for m in res_m.data:
-                name = f"{m.get('vorname', '')} {m.get('nachname', '')}".strip()
+                v = safe_val(m, 'vorname')
+                n = safe_val(m, 'nachname')
+                name = f"{v} {n}".strip()
                 if name:
                     kontakte.append(f"{name} (Mitglied)")
     except Exception:
@@ -51,7 +59,7 @@ def get_kontakte_fuer_auswahl():
         res_a = supabase.table("adressbuch").select("name, vorname, nachname").execute()
         if res_a.data:
             for a in res_a.data:
-                n = a.get('name') or f"{a.get('vorname', '')} {a.get('nachname', '')}".strip()
+                n = safe_val(a, 'name') or f"{safe_val(a, 'vorname')} {safe_val(a, 'nachname')}".strip()
                 if n:
                     kontakte.append(f"{n} (Adressbuch)")
     except Exception:
@@ -63,16 +71,17 @@ def parse_time(t_str):
         return time(0, 0)
     try:
         parts = str(t_str).split(":")
-        return time(hour=int(parts[0]), minute=int(parts[1]))
+        if len(parts) >= 2:
+            return time(hour=int(parts[0]), minute=int(parts[1]))
     except Exception:
-        return time(0, 0)
+        pass
+    return time(0, 0)
 
 def get_wetter_fuer_ort_und_datum(ort, datum_str):
-    """Holt Wetterdaten von Open-Meteo mit robustem Fallback."""
     if not ort:
         ort = "Bochum"
     try:
-        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={requests.utils.quote(ort)}&count=1&language=de&format=json"
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={requests.utils.quote(str(ort))}&count=1&language=de&format=json"
         geo_res = requests.get(geo_url, timeout=3).json()
         if not geo_res.get("results"):
             lat, lon = 51.4818, 7.2162  # Fallback Bochum
@@ -111,7 +120,6 @@ def get_wetter_fuer_ort_und_datum(ort, datum_str):
             "icon": w_icon
         }
     except Exception:
-        # Fallback-Werte damit die Ansicht nicht leer bleibt bei Verbindungsproblemen
         return {
             "t_max": 22,
             "t_min": 12,
@@ -137,19 +145,30 @@ def generiere_event_pdf(ev, rsvps, schichten, inventar_liste, wetter_info):
     )
     normal_style = styles['Normal']
     
-    story.append(Paragraph(f"<b>Event-Steckbrief: {ev.get('name')}</b>", title_style))
+    ev_name = safe_val(ev, 'name', 'Event')
+    story.append(Paragraph(f"<b>Event-Steckbrief: {ev_name}</b>", title_style))
     story.append(Paragraph(f"Erstellt am {datetime.now().strftime('%d.%m.%Y %H:%M')} Uhr | DRK Station", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#1E3A8A'), spaceAfter=8))
     
     w_text = f"{wetter_info['icon']} {wetter_info['beschreibung']} ({wetter_info['t_min']}°C - {wetter_info['t_max']}°C)" if wetter_info else "Keine Daten"
+    
+    start_d = formatiere_datum_fuer_anzeige(safe_val(ev, 'start_datum'))
+    end_d = formatiere_datum_fuer_anzeige(safe_val(ev, 'end_datum'))
+    u_start = str(safe_val(ev, 'uhrzeit_start', ''))[:5]
+    u_ende = str(safe_val(ev, 'uhrzeit_ende', ''))[:5]
+    treff = safe_val(ev, 'treffpunkt', '-')
+    u_treffen = str(safe_val(ev, 'uhrzeit_treffen', ''))[:5]
+    ort = safe_val(ev, 'ort', '-')
+    ansprech = safe_val(ev, 'ansprechperson', '-')
+
     details_data = [
-        [Paragraph("<b>Startdatum:</b>", normal_style), Paragraph(formatiere_datum_fuer_anzeige(ev.get('start_datum')), normal_style),
-         Paragraph("<b>Enddatum:</b>", normal_style), Paragraph(formatiere_datum_fuer_anzeige(ev.get('end_datum')), normal_style)],
-        [Paragraph("<b>Uhrzeit Beginn:</b>", normal_style), Paragraph(str(ev.get('uhrzeit_start', ''))[:5], normal_style),
-         Paragraph("<b>Uhrzeit Ende:</b>", normal_style), Paragraph(str(ev.get('uhrzeit_ende', ''))[:5], normal_style)],
-        [Paragraph("<b>Treffpunkt:</b>", normal_style), Paragraph(f"{ev.get('treffpunkt', '-')} ({str(ev.get('uhrzeit_treffen', ''))[:5]} Uhr)", normal_style),
-         Paragraph("<b>Veranstaltungsort:</b>", normal_style), Paragraph(ev.get('ort', '-'), normal_style)],
-        [Paragraph("<b>Ansprechperson:</b>", normal_style), Paragraph(ev.get('ansprechperson', '-'), normal_style),
+        [Paragraph("<b>Startdatum:</b>", normal_style), Paragraph(start_d, normal_style),
+         Paragraph("<b>Enddatum:</b>", normal_style), Paragraph(end_d, normal_style)],
+        [Paragraph("<b>Uhrzeit Beginn:</b>", normal_style), Paragraph(u_start, normal_style),
+         Paragraph("<b>Uhrzeit Ende:</b>", normal_style), Paragraph(u_ende, normal_style)],
+        [Paragraph("<b>Treffpunkt:</b>", normal_style), Paragraph(f"{treff} ({u_treffen} Uhr)", normal_style),
+         Paragraph("<b>Veranstaltungsort:</b>", normal_style), Paragraph(ort, normal_style)],
+        [Paragraph("<b>Ansprechperson:</b>", normal_style), Paragraph(ansprech, normal_style),
          Paragraph("<b>Wettervorhersage:</b>", normal_style), Paragraph(w_text, normal_style)]
     ]
     t_details = Table(details_data, colWidths=[100, 170, 100, 170])
@@ -162,15 +181,26 @@ def generiere_event_pdf(ev, rsvps, schichten, inventar_liste, wetter_info):
     ]))
     story.append(t_details)
     
-    if ev.get('bemerkungen'):
+    bemerkungen = safe_val(ev, 'bemerkungen')
+    if bemerkungen:
         story.append(Spacer(1, 6))
-        story.append(Paragraph(f"<b>Bemerkungen:</b> {ev.get('bemerkungen')}", normal_style))
+        story.append(Paragraph(f"<b>Bemerkungen:</b> {bemerkungen}", normal_style))
         
     # RSVP section
     story.append(Paragraph("Teilnahme-Rückmeldungen (RSVP)", h2_style))
-    kann = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'kann']
-    kann_nicht = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'kann nicht']
-    unsicher = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'unsicher']
+    kann = []
+    kann_nicht = []
+    unsicher = []
+    for r in rsvps:
+        m = safe_val(r, 'mitglieder', {})
+        m_name = f"{safe_val(m, 'vorname')} {safe_val(m, 'nachname')}".strip()
+        status = safe_val(r, 'status')
+        if status == 'kann':
+            kann.append(m_name)
+        elif status == 'kann nicht':
+            kann_nicht.append(m_name)
+        elif status == 'unsicher':
+            unsicher.append(m_name)
     
     rsvps_data = [
         [Paragraph(f"<b>Kann ({len(kann)})</b>", normal_style), Paragraph(f"<b>Kann nicht ({len(kann_nicht)})</b>", normal_style), Paragraph(f"<b>Unsicher ({len(unsicher)})</b>", normal_style)],
@@ -190,14 +220,13 @@ def generiere_event_pdf(ev, rsvps, schichten, inventar_liste, wetter_info):
     if schichten:
         schicht_rows = [[Paragraph("<b>Stand / Bereich</b>", normal_style), Paragraph("<b>Mitglied</b>", normal_style), Paragraph("<b>Von</b>", normal_style), Paragraph("<b>Bis</b>", normal_style)]]
         for s in schichten:
-            m_name = "-"
-            if s.get("mitglieder"):
-                m_name = f"{s['mitglieder'].get('vorname', '')} {s['mitglieder'].get('nachname', '')}"
+            m = safe_val(s, 'mitglieder', {})
+            m_name = f"{safe_val(m, 'vorname')} {safe_val(m, 'nachname')}".strip() or "-"
             schicht_rows.append([
-                Paragraph(str(s.get("stand_name", "")), normal_style),
+                Paragraph(str(safe_val(s, 'stand_name', '-')), normal_style),
                 Paragraph(str(m_name), normal_style),
-                Paragraph(str(s.get("von_zeit", ""))[:5], normal_style),
-                Paragraph(str(s.get("bis_zeit", ""))[:5], normal_style)
+                Paragraph(str(safe_val(s, 'von_zeit', ''))[:5], normal_style),
+                Paragraph(str(safe_val(s, 'bis_zeit', ''))[:5], normal_style)
             ])
         t_schichten = Table(schicht_rows, colWidths=[180, 180, 70, 70])
         t_schichten.setStyle(TableStyle([
@@ -211,15 +240,15 @@ def generiere_event_pdf(ev, rsvps, schichten, inventar_liste, wetter_info):
         story.append(Paragraph("Keine Schichten eingetragen.", normal_style))
         
     # Material section
-    story.append(Paragraph("Zugewiesenes Material & Inventar", h2_style))
+    story.append(Paragraph("Zugewiesenes Material & Ausstattung", h2_style))
     if inventar_liste:
         mat_rows = [[Paragraph("<b>Gegenstand</b>", normal_style), Paragraph("<b>Lagerort</b>", normal_style), Paragraph("<b>Benötigte Menge</b>", normal_style)]]
         for em in inventar_liste:
-            inv = em.get("inventar") or {}
+            inv = safe_val(em, 'inventar', {})
             mat_rows.append([
-                Paragraph(str(inv.get("name", "Unbekannt")), normal_style),
-                Paragraph(str(inv.get("lagerort", "-")), normal_style),
-                Paragraph(str(em.get("menge", "-")), normal_style)
+                Paragraph(str(safe_val(inv, 'name', 'Unbekannt')), normal_style),
+                Paragraph(str(safe_val(inv, 'lagerort', '-')), normal_style),
+                Paragraph(str(safe_val(em, 'menge', '-')), normal_style)
             ])
         t_mat = Table(mat_rows, colWidths=[220, 180, 100])
         t_mat.setStyle(TableStyle([
@@ -264,26 +293,32 @@ def show():
             heute_str = datetime.today().strftime("%Y-%m-%d")
             gefilterte_events = []
             for ev in events:
-                if ansicht_filter == "Nur kommende" and ev.get("end_datum", "") < heute_str:
+                end_d_val = safe_val(ev, 'end_datum', '')
+                if ansicht_filter == "Nur kommende" and end_d_val < heute_str:
                     continue
                 gefilterte_events.append(ev)
                 
             if gefilterte_events:
                 for ev in gefilterte_events:
-                    with st.expander(f"📌 {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))} - {formatiere_datum_fuer_anzeige(ev.get('end_datum'))})"):
+                    ev_name = safe_val(ev, 'name', 'Event')
+                    start_d_str = formatiere_datum_fuer_anzeige(safe_val(ev, 'start_datum'))
+                    end_d_str = formatiere_datum_fuer_anzeige(safe_val(ev, 'end_datum'))
+                    
+                    with st.expander(f"📌 {ev_name} ({start_d_str} - {end_d_str})"):
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.write(f"**Ort:** {ev.get('ort', '-')}")
-                            st.write(f"**Treffpunkt:** {ev.get('treffpunkt', '-')} um {ev.get('uhrzeit_treffen', '')[:5]} Uhr")
-                            st.write(f"**Beginn - Ende:** {ev.get('uhrzeit_start', '')[:5]} - {ev.get('uhrzeit_ende', '-') and ev.get('uhrzeit_ende', '')[:5]} Uhr")
+                            st.write(f"**Ort:** {safe_val(ev, 'ort', '-')}")
+                            st.write(f"**Treffpunkt:** {safe_val(ev, 'treffpunkt', '-')} um {str(safe_val(ev, 'uhrzeit_treffen', ''))[:5]} Uhr")
+                            st.write(f"**Beginn - Ende:** {str(safe_val(ev, 'uhrzeit_start', ''))[:5]} - {str(safe_val(ev, 'uhrzeit_ende', ''))[:5]} Uhr")
                         with col2:
-                            st.write(f"**Ansprechperson:** {ev.get('ansprechperson', '-')}")
-                            if ev.get('bemerkungen'):
-                                st.info(f"**Bemerkungen:** {ev.get('bemerkungen')}")
+                            st.write(f"**Ansprechperson:** {safe_val(ev, 'ansprechperson', '-')}")
+                            bem = safe_val(ev, 'bemerkungen')
+                            if bem:
+                                st.info(f"**Bemerkungen:** {bem}")
                         
                         # Wettervorhersage anzeigen
                         st.markdown("#### 🌤️ Wettervorhersage")
-                        wetter_info = get_wetter_fuer_ort_und_datum(ev.get('ort'), ev.get('start_datum'))
+                        wetter_info = get_wetter_fuer_ort_und_datum(safe_val(ev, 'ort'), safe_val(ev, 'start_datum'))
                         if wetter_info:
                             w_cols = st.columns(4)
                             w_cols[0].metric("Zustand", f"{wetter_info['icon']} {wetter_info['beschreibung']}")
@@ -295,20 +330,20 @@ def show():
                         
                         # RSVP Sektion für eingeloggtes Mitglied
                         st.markdown("#### Deine Rückmeldung (RSVP)")
-                        rsvps = get_rsvps_fuer_event(ev.get("id"))
+                        rsvps = get_rsvps_fuer_event(safe_val(ev, 'id'))
                         
                         aktueller_status = "unsicher"
                         if aktuelles_mitglied_id:
                             for r in rsvps:
-                                if r.get("mitglied_id") == aktuelles_mitglied_id:
-                                    aktueller_status = r.get("status", "unsicher")
+                                if safe_val(r, 'mitglied_id') == aktuelles_mitglied_id:
+                                    aktueller_status = safe_val(r, 'status', 'unsicher')
                                     break
                         
-                        st.markdown(f"Dein aktueller Status: **{aktueller_status.capitalize()}**")
+                        st.markdown(f"Dein aktueller Status: **{str(aktueller_status).capitalize()}**")
                         
                         if aktuelles_mitglied_id:
                             col_b1, col_b2, col_b3 = st.columns(3)
-                            ev_id = ev.get("id")
+                            ev_id = safe_val(ev, 'id')
                             if col_b1.button("✅ Kann teilnehmen", key=f"btn_kann_{ev_id}", use_container_width=True):
                                 setze_rsvp(ev_id, aktuelles_mitglied_id, "kann")
                                 st.success("Zusage gespeichert!")
@@ -327,9 +362,19 @@ def show():
                         st.divider()
                         st.markdown("**Teilnahme-Übersicht:**")
                         if rsvps:
-                            kann_liste = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'kann']
-                            kann_nicht_liste = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'kann nicht']
-                            unsicher_liste = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'unsicher']
+                            kann_liste = []
+                            kann_nicht_liste = []
+                            unsicher_liste = []
+                            for r in rsvps:
+                                m = safe_val(r, 'mitglieder', {})
+                                m_name = f"{safe_val(m, 'vorname')} {safe_val(m, 'nachname')}".strip()
+                                st_val = safe_val(r, 'status')
+                                if st_val == 'kann':
+                                    kann_liste.append(m_name)
+                                elif st_val == 'kann nicht':
+                                    kann_nicht_liste.append(m_name)
+                                elif st_val == 'unsicher':
+                                    unsicher_liste.append(m_name)
                             
                             c1, c2, c3 = st.columns(3)
                             c1.success(f"**Kann ({len(kann_liste)})**\n" + "\n".join([f"- {n}" for n in kann_liste]) if kann_liste else "**Kann (0)**")
@@ -342,15 +387,15 @@ def show():
                         
                         # PDF Download Button absolut sicher einbinden
                         try:
-                            s_pdf = get_schichten_fuer_event(ev.get("id"))
-                            m_pdf = get_material_fuer_event(ev.get("id"))
+                            s_pdf = get_schichten_fuer_event(safe_val(ev, 'id'))
+                            m_pdf = get_material_fuer_event(safe_val(ev, 'id'))
                             pdf_bytes = generiere_event_pdf(ev, rsvps, s_pdf, m_pdf, wetter_info)
                             st.download_button(
                                 label="📥 Event-Steckbrief als PDF herunterladen",
                                 data=pdf_bytes,
-                                file_name=f"Event_{ev.get('name', 'Details').replace(' ', '_')}_{ev.get('start_datum')}.pdf",
+                                file_name=f"Event_{safe_val(ev, 'name', 'Details').replace(' ', '_')}_{safe_val(ev, 'start_datum')}.pdf",
                                 mime="application/pdf",
-                                key=f"pdf_btn_{ev.get('id')}"
+                                key=f"pdf_btn_{safe_val(ev, 'id')}"
                             )
                         except Exception as pdf_err:
                             st.error(f"Fehler beim Erstellen des PDF-Buttons: {pdf_err}")
@@ -414,35 +459,35 @@ def show():
                                 st.error(f"Fehler beim Erstellen: {e}")
             else:
                 if events:
-                    event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
+                    event_dict = {f"{safe_val(ev, 'id')} - {safe_val(ev, 'name')} ({formatiere_datum_fuer_anzeige(safe_val(ev, 'start_datum'))})": ev for ev in events}
                     w_event = st.selectbox("Event auswählen", options=list(event_dict.keys()))
                     sel_ev = event_dict[w_event]
                     
                     with st.form("edit_event_form"):
-                        ee_name = st.text_input("Event-Name", value=sel_ev.get("name", ""))
+                        ee_name = st.text_input("Event-Name", value=safe_val(sel_ev, "name", ""))
                         
-                        s_str = sel_ev.get("start_datum")
+                        s_str = safe_val(sel_ev, "start_datum")
                         s_val = datetime.strptime(s_str, "%Y-%m-%d") if s_str else datetime.today()
                         ee_start = st.date_input("Startdatum", value=s_val, format="DD.MM.YYYY")
                         
-                        en_str = sel_ev.get("end_datum")
+                        en_str = safe_val(sel_ev, "end_datum")
                         en_val = datetime.strptime(en_str, "%Y-%m-%d") if en_str else datetime.today()
                         ee_end = st.date_input("Enddatum", value=en_val, format="DD.MM.YYYY")
                         
-                        ee_treffpunkt = st.text_input("Treffpunkt", value=sel_ev.get("treffpunkt", ""))
-                        ee_ort = st.text_input("Ort", value=sel_ev.get("ort", ""))
+                        ee_treffpunkt = st.text_input("Treffpunkt", value=safe_val(sel_ev, "treffpunkt", ""))
+                        ee_ort = st.text_input("Ort", value=safe_val(sel_ev, "ort", ""))
                             
-                        ee_uhr_start = st.time_input("Uhrzeit Beginn", value=parse_time(sel_ev.get("uhrzeit_start")))
-                        ee_uhr_treffen = st.time_input("Uhrzeit Treffen", value=parse_time(sel_ev.get("uhrzeit_treffen")))
+                        ee_uhr_start = st.time_input("Uhrzeit Beginn", value=parse_time(safe_val(sel_ev, "uhrzeit_start")))
+                        ee_uhr_treffen = st.time_input("Uhrzeit Treffen", value=parse_time(safe_val(sel_ev, "uhrzeit_treffen")))
                         
-                        ende_str = sel_ev.get("uhrzeit_ende")
+                        ende_str = safe_val(sel_ev, "uhrzeit_ende")
                         ee_uhr_ende = st.time_input("Uhrzeit Ende", value=parse_time(ende_str) if ende_str else None)
                         
-                        aktuelle_ansprech = sel_ev.get("ansprechperson", "") or ""
+                        aktuelle_ansprech = safe_val(sel_ev, "ansprechperson", "")
                         ansprech_edit_wahl = st.selectbox("Ansprechperson aus Adressbuch/Mitgliedern", options=["-- Manuell / Unverändert --"] + kontakte_liste)
                         ee_ansprech_manuell = st.text_input("Ansprechperson (manuell)", value=aktuelle_ansprech)
                         
-                        ee_bemerkungen = st.text_area("Bemerkungen", value=sel_ev.get("bemerkungen", "") or "")
+                        ee_bemerkungen = st.text_area("Bemerkungen", value=safe_val(sel_ev, "bemerkungen", ""))
                         
                         col_s, col_d = st.columns(2)
                         with col_s:
@@ -465,7 +510,7 @@ def show():
                                 "ansprechperson": final_ansprech_edit if final_ansprech_edit else None
                             }
                             try:
-                                event_aktualisieren(sel_ev.get("id"), daten)
+                                event_aktualisieren(safe_val(sel_ev, "id"), daten)
                                 st.success("Event erfolgreich aktualisiert!")
                                 st.rerun()
                             except Exception as e:
@@ -473,7 +518,7 @@ def show():
                                 
                         if del_btn:
                             try:
-                                event_loeschen(sel_ev.get("id"))
+                                event_loeschen(safe_val(sel_ev, "id"))
                                 st.success("Event gelöscht!")
                                 st.rerun()
                             except Exception as e:
@@ -487,29 +532,28 @@ def show():
     with tab_schichten:
         st.subheader("👥 Schichten & Standbetreuung planen")
         if events:
-            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
+            event_dict = {f"{safe_val(ev, 'id')} - {safe_val(ev, 'name')} ({formatiere_datum_fuer_anzeige(safe_val(ev, 'start_datum'))})": ev for ev in events}
             w_ev_s = st.selectbox("Event für Schichten wählen", options=list(event_dict.keys()), key="schicht_ev_sel")
             sel_ev_s = event_dict[w_ev_s]
             
-            schichten = get_schichten_fuer_event(sel_ev_s.get("id"))
+            schichten = get_schichten_fuer_event(safe_val(sel_ev_s, "id"))
             
             if schichten:
                 st.markdown("**Aktuelle Schichten:**")
                 schicht_liste_anzeige = []
                 for s in schichten:
-                    m_name = "-"
-                    if s.get("mitglieder"):
-                        m_name = f"{s['mitglieder'].get('vorname', '')} {s['mitglieder'].get('nachname', '')}"
+                    m = safe_val(s, 'mitglieder', {})
+                    m_name = f"{safe_val(m, 'vorname')} {safe_val(m, 'nachname')}".strip() or "-"
                     schicht_liste_anzeige.append({
-                        "ID": s.get("id"),
-                        "Stand / Bereich": s.get("stand_name"),
+                        "ID": safe_val(s, "id"),
+                        "Stand / Bereich": safe_val(s, "stand_name"),
                         "Mitglied": m_name,
-                        "Von": s.get("von_zeit", "")[:5],
-                        "Bis": s.get("bis_zeit", "")[:5]
+                        "Von": str(safe_val(s, "von_zeit", ""))[:5],
+                        "Bis": str(safe_val(s, "bis_zeit", ""))[:5]
                     })
                 st.dataframe(schicht_liste_anzeige, use_container_width=True, hide_index=True)
                 
-                schicht_ids = [s.get("id") for s in schichten]
+                schicht_ids = [safe_val(s, "id") for s in schichten]
                 del_s_id = st.selectbox("Schicht-ID zum Löschen auswählen", options=[None] + schicht_ids)
                 if del_s_id and st.button("Ausgewählte Schicht löschen"):
                     try:
@@ -529,7 +573,7 @@ def show():
                 with st.form("neue_schicht_form"):
                     stand_name = st.text_input("Stand- oder Aufgabenname (z.B. Grillstand, Kasse) *")
                     
-                    mitglied_dict = {f"{m.get('vorname')} {m.get('nachname')} ({m.get('rolle', 'Mitglied')})": m.get('id') for m in mitglieder}
+                    mitglied_dict = {f"{safe_val(m, 'vorname')} {safe_val(m, 'nachname')} ({safe_val(m, 'rolle', 'Mitglied')})": safe_val(m, 'id') for m in mitglieder}
                     w_mitglied = st.selectbox("Mitglied zuweisen", options=["Keine direkte Zuweisung"] + list(mitglied_dict.keys()))
                     
                     col1, col2 = st.columns(2)
@@ -545,7 +589,7 @@ def show():
                         else:
                             m_id = mitglied_dict.get(w_mitglied) if w_mitglied != "Keine direkte Zuweisung" else None
                             schicht_daten = {
-                                "event_id": sel_ev_s.get("id"),
+                                "event_id": safe_val(sel_ev_s, "id"),
                                 "mitglied_id": m_id,
                                 "stand_name": stand_name,
                                 "von_zeit": von_zeit.strftime("%H:%M:%S"),
@@ -566,26 +610,26 @@ def show():
     with tab_material:
         st.subheader("📦 Event-Material & Inventarzuordnung")
         if events:
-            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
+            event_dict = {f"{safe_val(ev, 'id')} - {safe_val(ev, 'name')} ({formatiere_datum_fuer_anzeige(safe_val(ev, 'start_datum'))})": ev for ev in events}
             w_ev_m = st.selectbox("Event für Material wählen", options=list(event_dict.keys()), key="mat_ev_sel")
             sel_ev_m = event_dict[w_ev_m]
             
-            event_mat = get_material_fuer_event(sel_ev_m.get("id"))
+            event_mat = get_material_fuer_event(safe_val(sel_ev_m, "id"))
             if event_mat:
                 st.markdown("**Zugewiesenes Material:**")
                 mat_anzeige = []
                 for em in event_mat:
-                    inv = em.get("inventar") or {}
+                    inv = safe_val(em, 'inventar', {})
                     mat_anzeige.append({
-                        "Verknüpfungs-ID": em.get("id"),
-                        "Gegenstand": inv.get("name", "Unbekannt"),
-                        "Lagerort": inv.get("lagerort", "-"),
-                        "Benötigte Menge": em.get("menge"),
-                        "Verfügbar im Lager": inv.get("menge_verfuegbar", "-")
+                        "Verknüpfungs-ID": safe_val(em, "id"),
+                        "Gegenstand": safe_val(inv, "name", "Unbekannt"),
+                        "Lagerort": safe_val(inv, "lagerort", "-"),
+                        "Benötigte Menge": safe_val(em, "menge"),
+                        "Verfügbar im Lager": safe_val(inv, "menge_verfuegbar", "-")
                     })
                 st.dataframe(mat_anzeige, use_container_width=True, hide_index=True)
                 
-                mat_ids = [em.get("id") for em in event_mat]
+                mat_ids = [safe_val(em, "id") for em in event_mat]
                 del_m_id = st.selectbox("Material-Verknüpfung entfernen (ID)", options=[None] + mat_ids)
                 if del_m_id and st.button("Verknüpfung löschen"):
                     try:
@@ -602,19 +646,19 @@ def show():
                 st.markdown("#### Material aus Lager hinzufügen")
                 inventar_liste = get_alle_inventar()
                 if inventar_liste:
-                    inv_dict = {f"{i.get('name')} (Lager: {i.get('lagerort', 'k.A.')} | Verf: {i.get('menge_verfuegbar')})": i for i in inventar_liste}
+                    inv_dict = {f"{safe_val(i, 'name')} (Lager: {safe_val(i, 'lagerort', 'k.A.')} | Verf: {safe_val(i, 'menge_verfuegbar')})": i for i in inventar_liste}
                     
                     with st.form("event_mat_form"):
                         w_inv = st.selectbox("Inventar-Gegenstand", options=list(inv_dict.keys()))
                         sel_inv = inv_dict[w_inv]
-                        max_v = sel_inv.get("menge_verfuegbar", 1)
-                        menge_benoetigt = st.number_input("Benötigte Menge", min_value=1, max_value=max(1, max_v), value=1)
+                        max_v = safe_val(sel_inv, "menge_verfuegbar", 1)
+                        menge_benoetigt = st.number_input("Benötigte Menge", min_value=1, max_value=max(1, int(max_v)), value=1)
                         
                         m_sub = st.form_submit_button("Material zu Event hinzufügen", type="primary")
                         if m_sub:
                             daten = {
-                                "event_id": sel_ev_m.get("id"),
-                                "inventar_id": sel_inv.get("id"),
+                                "event_id": safe_val(sel_ev_m, "id"),
+                                "inventar_id": safe_val(sel_inv, "id"),
                                 "menge": menge_benoetigt
                             }
                             try:
@@ -634,28 +678,29 @@ def show():
     with tab_freigaben:
         st.subheader("🔒 Event-Freigaben & Status")
         if events:
-            event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
+            event_dict = {f"{safe_val(ev, 'id')} - {safe_val(ev, 'name')} ({formatiere_datum_fuer_anzeige(safe_val(ev, 'start_datum'))})": ev for ev in events}
             w_ev_f = st.selectbox("Event für Freigaben wählen", options=list(event_dict.keys()), key="freigabe_ev_sel")
             sel_ev_f = event_dict[w_ev_f]
             
-            freigaben = get_freigaben_fuer_event(sel_ev_f.get("id"))
+            freigaben = get_freigaben_fuer_event(safe_val(sel_ev_f, "id"))
             if freigaben:
                 st.markdown("**Vorhandene Freigaben:**")
                 freigabe_anzeige = []
                 for f in freigaben:
-                    m_name = "-"
-                    if f.get("mitglieder"):
-                        m_name = f"{f['mitglieder'].get('vorname', '')} {f['mitglieder'].get('nachname', '')}"
+                    m = safe_val(f, 'mitglieder', {})
+                    m_name = f"{safe_val(m, 'vorname')} {safe_val(m, 'nachname')}".strip() or "-"
+                    titel_val = safe_val(f, 'titel') or safe_val(f, 'bereich', 'Freigabe')
+                    created_at = str(safe_val(f, 'created_at', ''))
                     freigabe_anzeige.append({
-                        "ID": f.get("id"),
-                        "Bereich / Titel": f.get("titel") or f.get("bereich", "Freigabe"),
-                        "Status": f.get("status", "Offen"),
+                        "ID": safe_val(f, "id"),
+                        "Bereich / Titel": titel_val,
+                        "Status": safe_val(f, "status", "Offen"),
                         "Freigegeben durch": m_name,
-                        "Datum": f.get("created_at", "")[:10]
+                        "Datum": created_at[:10] if len(created_at) >= 10 else created_at
                     })
                 st.dataframe(freigabe_anzeige, use_container_width=True, hide_index=True)
                 
-                freigabe_ids = [f.get("id") for f in freigaben]
+                freigabe_ids = [safe_val(f, "id") for f in freigaben]
                 del_f_id = st.selectbox("Freigabe-ID zum Löschen auswählen", options=[None] + freigabe_ids, key="del_freigabe_sel")
                 if del_f_id and st.button("Ausgewählte Freigabe löschen"):
                     try:
@@ -681,7 +726,7 @@ def show():
                             st.error("Bitte einen Titel oder Bereich für die Freigabe angeben.")
                         else:
                             f_daten = {
-                                "event_id": sel_ev_f.get("id"),
+                                "event_id": safe_val(sel_ev_f, "id"),
                                 "titel": f_titel,
                                 "status": f_status,
                                 "bemerkung": f_bemerkung if f_bemerkung else None,
