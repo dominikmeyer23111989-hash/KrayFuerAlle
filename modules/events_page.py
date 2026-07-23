@@ -1,6 +1,14 @@
 import streamlit as st
 from datetime import datetime, time
 import pandas as pd
+import requests
+import io
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
 from modules.events import (
     get_alle_events,
     event_erstellen,
@@ -60,6 +68,187 @@ def parse_time(t_str):
     except Exception:
         return time(0, 0)
 
+def get_wetter_fuer_ort_und_datum(ort, datum_str):
+    """Holt Wetterdaten von Open-Meteo für einen Ort und ein Datum."""
+    if not ort or not datum_str:
+        return None
+    try:
+        # 1. Geocoding um Koordinaten zu erhalten
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={requests.utils.quote(ort)}&count=1&language=de&format=json"
+        geo_res = requests.get(geo_url, timeout=3).json()
+        if not geo_res.get("results"):
+            # Fallback auf Ruhrgebiet / Bochum wenn Ort nicht direkt gefunden
+            lat, lon = 51.4818, 7.2162
+        else:
+            lat = geo_res["results"][0]["lat"]
+            lon = geo_res["results"][0]["lon"]
+            
+        # 2. Wettervorhersage abrufen
+        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Europe/Berlin"
+        w_res = requests.get(weather_url, timeout=3).json()
+        
+        daily = w_res.get("daily", {})
+        times = daily.get("time", [])
+        if datum_str in times:
+            idx = times.index(datum_str)
+            t_max = daily.get("temperature_2m_max", [None])[idx]
+            t_min = daily.get("temperature_2m_min", [None])[idx]
+            rain = daily.get("precipitation_sum", [None])[idx]
+            wcode = daily.get("weathercode", [None])[idx]
+            
+            # WMO Wetterinterpretation
+            w_desc, w_icon = "Unbekannt", "🌡️"
+            if wcode in [0]: w_desc, w_icon = "Klar / Sonnig", "☀️"
+            elif wcode in [1, 2, 3]: w_desc, w_icon = "Teilweise bewölkt", "⛅"
+            elif wcode in [45, 48]: w_desc, w_icon = "Nebel", "🌫️"
+            elif wcode in [51, 53, 55, 56, 57]: w_desc, w_icon = "Nieselregen", "🌧️"
+            elif wcode in [61, 63, 65, 66, 67]: w_desc, w_icon = "Regen", "🌧️"
+            elif wcode in [71, 73, 75, 77]: w_desc, w_icon = "Schneefall", "🌨️"
+            elif wcode in [80, 81, 82]: w_desc, w_icon = "Regenschauer", "🌦️"
+            elif wcode in [95, 96, 99]: w_desc, w_icon = "Gewitter", "⚡"
+            
+            return {
+                "t_max": t_max,
+                "t_min": t_min,
+                "rain": rain,
+                "beschreibung": w_desc,
+                "icon": w_icon
+            }
+    except Exception:
+        pass
+    return None
+
+def generiere_event_pdf(ev, rsvps, schichten, inventar_liste, wetter_info):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'EventTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#1E3A8A'),
+        spaceAfter=4
+    )
+    subtitle_style = ParagraphStyle(
+        'EventSubtitle',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.HexColor('#4B5563'),
+        spaceAfter=10
+    )
+    h2_style = ParagraphStyle(
+        'EventH2',
+        parent=styles['Heading2'],
+        fontSize=12,
+        textColor=colors.HexColor('#1E3A8A'),
+        spaceBefore=10,
+        spaceAfter=4
+    )
+    normal_style = styles['Normal']
+    
+    # Header
+    story.append(Paragraph(f"<b>Event-Steckbrief: {ev.get('name')}</b>", title_style))
+    story.append(Paragraph(f"Erstellt am {datetime.now().strftime('%d.%m.%Y %H:%M')} Uhr | DRK Station", subtitle_style))
+    story.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#1E3A8A'), spaceAfter=8))
+    
+    # Details Table
+    w_text = f"{wetter_info['icon']} {wetter_info['beschreibung']} ({wetter_info['t_min']}°C - {wetter_info['t_max']}°C)" if wetter_info else "Keine Daten"
+    details_data = [
+        [Paragraph("<b>Startdatum:</b>", normal_style), Paragraph(formatiere_datum_fuer_anzeige(ev.get('start_datum')), normal_style),
+         Paragraph("<b>Enddatum:</b>", normal_style), Paragraph(formatiere_datum_fuer_anzeige(ev.get('end_datum')), normal_style)],
+        [Paragraph("<b>Uhrzeit Beginn:</b>", normal_style), Paragraph(str(ev.get('uhrzeit_start', ''))[:5], normal_style),
+         Paragraph("<b>Uhrzeit Ende:</b>", normal_style), Paragraph(str(ev.get('uhrzeit_ende', ''))[:5], normal_style)],
+        [Paragraph("<b>Treffpunkt:</b>", normal_style), Paragraph(f"{ev.get('treffpunkt', '-')} ({str(ev.get('uhrzeit_treffen', ''))[:5]} Uhr)", normal_style),
+         Paragraph("<b>Veranstaltungsort:</b>", normal_style), Paragraph(ev.get('ort', '-'), normal_style)],
+        [Paragraph("<b>Ansprechperson:</b>", normal_style), Paragraph(ev.get('ansprechperson', '-'), normal_style),
+         Paragraph("<b>Wettervorhersage:</b>", normal_style), Paragraph(w_text, normal_style)]
+    ]
+    t_details = Table(details_data, colWidths=[100, 170, 100, 170])
+    t_details.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F3F4F6')),
+        ('PADDING', (0,0), (-1,-1), 5),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+    ]))
+    story.append(t_details)
+    
+    if ev.get('bemerkungen'):
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(f"<b>Bemerkungen:</b> {ev.get('bemerkungen')}", normal_style))
+        
+    # RSVP section
+    story.append(Paragraph("Teilnahme-Rückmeldungen (RSVP)", h2_style))
+    kann = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'kann']
+    kann_nicht = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'kann nicht']
+    unsicher = [f"{r.get('mitglieder', {}).get('vorname', '')} {r.get('mitglieder', {}).get('nachname', '')}" for r in rsvps if r.get('status') == 'unsicher']
+    
+    rsvps_data = [
+        [Paragraph(f"<b>Kann ({len(kann)})</b>", normal_style), Paragraph(f"<b>Kann nicht ({len(kann_nicht)})</b>", normal_style), Paragraph(f"<b>Unsicher ({len(unsicher)})</b>", normal_style)],
+        [Paragraph(", ".join(kann) if kann else "-", normal_style), Paragraph(", ".join(kann_nicht) if kann_nicht else "-", normal_style), Paragraph(", ".join(unsicher) if unsicher else "-", normal_style)]
+    ]
+    t_rsvps = Table(rsvps_data, colWidths=[180, 180, 180])
+    t_rsvps.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E5E7EB')),
+        ('PADDING', (0,0), (-1,-1), 5),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+    ]))
+    story.append(t_rsvps)
+    
+    # Schichten section
+    story.append(Paragraph("Schichtplan & Standbetreuung", h2_style))
+    if schichten:
+        schicht_rows = [[Paragraph("<b>Stand / Bereich</b>", normal_style), Paragraph("<b>Mitglied</b>", normal_style), Paragraph("<b>Von</b>", normal_style), Paragraph("<b>Bis</b>", normal_style)]]
+        for s in schichten:
+            m_name = "-"
+            if s.get("mitglieder"):
+                m_name = f"{s['mitglieder'].get('vorname', '')} {s['mitglieder'].get('nachname', '')}"
+            schicht_rows.append([
+                Paragraph(str(s.get("stand_name", "")), normal_style),
+                Paragraph(str(m_name), normal_style),
+                Paragraph(str(s.get("von_zeit", ""))[:5], normal_style),
+                Paragraph(str(s.get("bis_zeit", ""))[:5], normal_style)
+            ])
+        t_schichten = Table(schicht_rows, colWidths=[180, 180, 70, 70])
+        t_schichten.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E5E7EB')),
+            ('PADDING', (0,0), (-1,-1), 4),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+        ]))
+        story.append(t_schichten)
+    else:
+        story.append(Paragraph("Keine Schichten eingetragen.", normal_style))
+        
+    # Material section
+    story.append(Paragraph("Zugewiesenes Material & Inventar", h2_style))
+    if inventar_liste:
+        mat_rows = [[Paragraph("<b>Gegenstand</b>", normal_style), Paragraph("<b>Lagerort</b>", normal_style), Paragraph("<b>Benötigte Menge</b>", normal_style)]]
+        for em in inventar_liste:
+            inv = em.get("inventar") or {}
+            mat_rows.append([
+                Paragraph(str(inv.get("name", "Unbekannt")), normal_style),
+                Paragraph(str(inv.get("lagerort", "-")), normal_style),
+                Paragraph(str(em.get("menge", "-")), normal_style)
+            ])
+        t_mat = Table(mat_rows, colWidths=[220, 180, 100])
+        t_mat.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E5E7EB')),
+            ('PADDING', (0,0), (-1,-1), 4),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+        ]))
+        story.append(t_mat)
+    else:
+        story.append(Paragraph("Kein Material zugeordnet.", normal_style))
+        
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 def show():
     st.header("📅 Event- & Veranstaltungsverwaltung")
     
@@ -105,6 +294,18 @@ def show():
                             st.write(f"**Ansprechperson:** {ev.get('ansprechperson', '-')}")
                             if ev.get('bemerkungen'):
                                 st.info(f"**Bemerkungen:** {ev.get('bemerkungen')}")
+                        
+                        # Wettervorhersage anzeigen
+                        st.markdown("#### 🌤️ Wettervorhersage")
+                        wetter_info = get_wetter_fuer_ort_und_datum(ev.get('ort'), ev.get('start_datum'))
+                        if wetter_info:
+                            w_cols = st.columns(4)
+                            w_cols[0].metric("Zustand", f"{wetter_info['icon']} {wetter_info['beschreibung']}")
+                            w_cols[1].metric("Max. Temp.", f"{wetter_info['t_max']} °C")
+                            w_cols[2].metric("Min. Temp.", f"{wetter_info['t_min']} °C")
+                            w_cols[3].metric("Niederschlag", f"{wetter_info['rain']} mm")
+                        else:
+                            st.text("Keine Wetterdaten für diesen Ort/Zeitraum verfügbar.")
                         
                         st.divider()
                         
@@ -153,6 +354,19 @@ def show():
                             c3.info(f"**Unsicher ({len(unsicher_liste)})**\n" + "\n".join([f"- {n}" for n in unsicher_liste]) if unsicher_liste else "**Unsicher (0)**")
                         else:
                             st.text("Bisher keine Rückmeldungen eingetragen.")
+                            
+                        st.divider()
+                        # PDF Download Button
+                        s_pdf = get_schichten_fuer_event(ev.get("id"))
+                        m_pdf = get_material_fuer_event(ev.get("id"))
+                        pdf_bytes = generiere_event_pdf(ev, rsvps, s_pdf, m_pdf, wetter_info)
+                        st.download_button(
+                            label="📥 Event-Steckbrief als PDF herunterladen",
+                            data=pdf_bytes,
+                            file_name=f"Event_{ev.get('name', 'Details').replace(' ', '_')}_{ev.get('start_datum')}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_btn_{ev.get('id')}"
+                        )
             else:
                 st.info("Keine Events für diesen Filter gefunden.")
         else:
@@ -423,7 +637,7 @@ def show():
                             except Exception as e:
                                 st.error(f"Fehler: {e}")
                 else:
-                    st.warning("Kein Inventar im Lager vorhanden.")
+                    st.info("Kein Inventar im System gefunden.")
         else:
             st.info("Keine Events verfügbar.")
 
@@ -431,9 +645,7 @@ def show():
     # 5. EVENT-FREIGABEN
     # ==========================================
     with tab_freigaben:
-        st.subheader("🔒 Spezifische Event-Freigaben (Sichtbarkeit)")
-        st.markdown("Falls Events nur für bestimmte Mitglieder sichtbar/freigegeben sein sollen, kannst du sie hier zuordnen.")
-        
+        st.subheader("🔒 Event-Freigaben & Status")
         if events:
             event_dict = {f"{ev.get('id')} - {ev.get('name')} ({formatiere_datum_fuer_anzeige(ev.get('start_datum'))})": ev for ev in events}
             w_ev_f = st.selectbox("Event für Freigaben wählen", options=list(event_dict.keys()), key="freigabe_ev_sel")
@@ -441,20 +653,24 @@ def show():
             
             freigaben = get_freigaben_fuer_event(sel_ev_f.get("id"))
             if freigaben:
-                st.markdown("**Bereits freigegebene Mitglieder:**")
-                f_anzeige = []
+                st.markdown("**Vorhandene Freigaben:**")
+                freigabe_anzeige = []
                 for f in freigaben:
-                    m = f.get("mitglieder") or {}
-                    f_anzeige.append({
-                        "Freigabe-ID": f.get("id"),
-                        "Name": f"{m.get('vorname', '')} {m.get('nachname', '')}",
-                        "E-Mail": m.get("email", "-")
+                    m_name = "-"
+                    if f.get("mitglieder"):
+                        m_name = f"{f['mitglieder'].get('vorname', '')} {f['mitglieder'].get('nachname', '')}"
+                    freigabe_anzeige.append({
+                        "ID": f.get("id"),
+                        "Bereich / Titel": f.get("titel") or f.get("bereich", "Freigabe"),
+                        "Status": f.get("status", "Offen"),
+                        "Freigegeben durch": m_name,
+                        "Datum": f.get("created_at", "")[:10]
                     })
-                st.dataframe(f_anzeige, use_container_width=True, hide_index=True)
+                st.dataframe(freigabe_anzeige, use_container_width=True, hide_index=True)
                 
-                f_ids = [f.get("id") for f in freigaben]
-                del_f_id = st.selectbox("Freigabe aufheben (ID)", options=[None] + f_ids)
-                if del_f_id and st.button("Freigabe entziehen"):
+                freigabe_ids = [f.get("id") for f in freigaben]
+                del_f_id = st.selectbox("Freigabe-ID zum Löschen auswählen", options=[None] + freigabe_ids, key="del_freigabe_sel")
+                if del_f_id and st.button("Ausgewählte Freigabe löschen"):
                     try:
                         freigabe_loeschen(del_f_id)
                         st.success("Freigabe entfernt!")
@@ -462,32 +678,33 @@ def show():
                     except Exception as e:
                         st.error(f"Fehler: {e}")
             else:
-                st.info("Für dieses Event sind keine exklusiven Freigaben hinterlegt (oder öffentlich für alle).")
+                st.info("Für dieses Event sind noch keine Freigaben hinterlegt.")
                 
             if is_admin_or_vorstand:
                 st.divider()
-                st.markdown("#### Mitglied Freigabe erteilen")
-                mitglieder = get_alle_mitglieder()
-                if mitglieder:
-                    m_dict = {f"{m.get('vorname')} {m.get('nachname')} ({m.get('email', '-')})": m.get('id') for m in mitglieder}
+                st.markdown("#### Neue Freigabe hinzufügen")
+                with st.form("neue_freigabe_form"):
+                    f_titel = st.text_input("Bereich / Art der Freigabe (z.B. Vorstand, Kasse, Material, Hygiene) *")
+                    f_status = st.selectbox("Status", ["Freigegeben", "Ausstehend", "Abgelehnt"])
+                    f_bemerkung = st.text_area("Kommentar / Auflagen (optional)")
                     
-                    with st.form("freigabe_form"):
-                        w_mitglied_f = st.selectbox("Mitglied auswählen", options=list(m_dict.keys()))
-                        f_sub = st.form_submit_button("Freigabe erteilen", type="primary")
-                        
-                        if f_sub:
-                            m_id = m_dict[w_mitglied_f]
-                            daten = {
+                    f_sub = st.form_submit_button("Freigabe speichern", type="primary")
+                    if f_sub:
+                        if not f_titel:
+                            st.error("Bitte einen Titel oder Bereich für die Freigabe angeben.")
+                        else:
+                            f_daten = {
                                 "event_id": sel_ev_f.get("id"),
-                                "mitglied_id": m_id
+                                "titel": f_titel,
+                                "status": f_status,
+                                "bemerkung": f_bemerkung if f_bemerkung else None,
+                                "mitglied_id": aktuelles_mitglied_id
                             }
                             try:
-                                freigabe_hinzufuegen(daten)
-                                st.success("Freigabe erfolgreich erteilt!")
+                                freigabe_hinzufuegen(f_daten)
+                                st.success("Freigabe erfolgreich hinzugefügt!")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Fehler (vielleicht schon freigegeben?): {e}")
-                else:
-                    st.warning("Keine Mitglieder gefunden.")
+                                st.error(f"Fehler: {e}")
         else:
             st.info("Keine Events verfügbar.")
