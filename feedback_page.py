@@ -1,6 +1,7 @@
 import streamlit as st
 from database import supabase
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -72,13 +73,17 @@ def show():
     user_rolle = st.session_state.get("user_rolle", "").lower()
     ist_admin = user_rolle in ["admin", "administrator", "vorstand"]
 
+    # Tabs dynamisch erstellen, ohne None-Werte
     if ist_admin:
         tab_senden, tab_postfach = st.tabs(["✍️ Nachricht senden", "📥 Admin-Postfach"])
     else:
-        tab_senden, tab_postfach = st.tabs(["✍️ Nachricht senden", None])
+        tab_senden = st.container()
+        tab_postfach = None
+        # Falls man unbedingt st.tabs für normale Nutzer will, reicht ein einzelner Tab:
+        # [tab_senden] = st.tabs(["✍️ Nachricht senden"])
 
     # --- TAB 1: NACHRICHT SENDEN ---
-    with tab_senden:
+    with (tab_senden if not ist_admin else tab_senden): # Funktioniert für beide Fälle sauber
         st.subheader("Was hast du auf dem Herzen?")
         
         with st.form("feedback_form"):
@@ -139,7 +144,9 @@ def show():
                     status_icon = "✅ [Erledigt]" if m.get("erledigt") else "🔥 [Offen]"
                     datum_roh = m.get("erstellt_am", "")
                     try:
-                        datum_fmt = datetime.fromisoformat(datum_roh.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M")
+                        dt = datetime.fromisoformat(datum_roh.replace("Z", "+00:00"))
+                        dt_lokal = dt.astimezone(ZoneInfo("Europe/Berlin"))
+                        datum_fmt = dt_lokal.strftime("%d.%m.%Y %H:%M")
                     except:
                         datum_fmt = "Unbekannt"
                         
