@@ -17,7 +17,8 @@ from modules import (
     ausweis_page,
     chronik_page,
     feedback_page,
-    ticker_component
+    ticker_component,
+    changelog_page
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -197,6 +198,7 @@ else:
         "Aufgaben & To-Dos",
         "Dokumente",
         "Chronik",
+        "🚀 Changelog",
         "💡 Feedback & Wünsche"
     ]
     
@@ -241,6 +243,8 @@ else:
         dokumente_page.show()
     elif menue == "Chronik":
         chronik_page.show()
+    elif menue == "🚀 Changelog":
+        changelog_page.show()
     elif menue == "Finanzen & Kassenbuch":
         finanzen_page.show()
     elif menue == "Adressbuch":
