@@ -68,11 +68,12 @@ def show():
         if not geburtsdatum_str:
             return None
         try:
-            if "T" in str(geburtsdatum_str):
-                geburtsdatum_str = str(geburtsdatum_str).split("T")[0]
-            elif " " in str(geburtsdatum_str):
-                geburtsdatum_str = str(geburtsdatum_str).split(" ")[0]
-            geb_dat = datetime.strptime(geburtsdatum_str, "%Y-%m-%d")
+            g_str = str(geburtsdatum_str)
+            if "T" in g_str:
+                g_str = g_str.split("T")[0]
+            elif " " in g_str:
+                g_str = g_str.split(" ")[0]
+            geb_dat = datetime.strptime(g_str, "%Y-%m-%d")
             heute = datetime.today()
             return heute.year - geb_dat.year - ((heute.month, heute.day) < (geb_dat.month, geb_dat.day))
         except Exception:
@@ -107,18 +108,20 @@ def show():
                     b_datum = m.get("beitrittsdatum")
                     if b_datum:
                         try:
-                            if "T" in str(b_datum): b_datum = str(b_datum).split("T")[0]
-                            elif " " in str(b_datum): b_datum = str(b_datum).split(" ")[0]
-                            m["beitrittsdatum"] = datetime.strptime(b_datum, "%Y-%m-%d").strftime("%d/%m/%Y")
+                            b_str = str(b_datum)
+                            if "T" in b_str: b_str = b_str.split("T")[0]
+                            elif " " in b_str: b_str = b_str.split(" ")[0]
+                            m["beitrittsdatum"] = datetime.strptime(b_str, "%Y-%m-%d").strftime("%d/%m/%Y")
                         except Exception:
                             pass
                     
                     g_datum = m.get("geburtsdatum")
                     if g_datum:
                         try:
-                            if "T" in str(g_datum): g_datum = str(g_datum).split("T")[0]
-                            elif " " in str(g_datum): g_datum = str(g_datum).split(" ")[0]
-                            m["geburtsdatum"] = datetime.strptime(g_datum, "%Y-%m-%d").strftime("%d/%m/%Y")
+                            g_str = str(g_datum)
+                            if "T" in g_str: g_str = g_str.split("T")[0]
+                            elif " " in g_str: g_str = g_str.split(" ")[0]
+                            m["geburtsdatum"] = datetime.strptime(g_str, "%Y-%m-%d").strftime("%d/%m/%Y")
                         except Exception:
                             pass
 
@@ -173,7 +176,6 @@ def show():
             except Exception:
                 naechste_nr = "1"
 
-            # Checkbox AUSSERHALB des Forms platziert, damit ein Klick sofort das Layout aktualisiert
             auto_nr_aktiv = str_alias.checkbox("Mitgliedsnummer automatisch vergeben (ab 1)", value=True, key="auto_nr_checkbox")
 
             with str_alias.form("neues_mitglied_form"):
@@ -452,7 +454,7 @@ def show():
                     class PDF(FPDF):
                         def header(self):
                             self.set_font('helvetica', 'B', 15)
-                            self.cell(0, 10, 'KrayFürAlle e.V. - Mitgliederbericht', 0, 1, 'C')
+                            self.cell(0, 10, 'Verein - Mitgliederbericht', 0, 1, 'C')
                             self.ln(5)
 
                         def footer(self):
