@@ -19,7 +19,8 @@ from modules import (
     feedback_page,
     ticker_component,
     changelog_page,
-    chat_page
+    chat_page,
+    geburtstage_ehrungen_page
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -194,6 +195,7 @@ else:
         "Mitglieder & Rollen", 
         "Mitgliedsausweis", 
         "💬 Vereins-Chat",
+        "🎂 Geburtstage & Ehrungen",
         "Inventar & Ausleihe", 
         "Events & Schichten", 
         "Kalender & Termine",
@@ -235,6 +237,8 @@ else:
         ausweis_page.show()
     elif menue == "💬 Vereins-Chat":
         chat_page.show()
+    elif menue == "🎂 Geburtstage & Ehrungen":
+        geburtstage_ehrungen_page.show()
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
     elif menue == "Events & Schichten":
