@@ -15,7 +15,8 @@ from modules import (
     todos_page, 
     dokumente_page, 
     ausweis_page,
-    chronik_page
+    chronik_page,
+    feedback_page
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -239,3 +240,5 @@ else:
         finanzen_page.show()
     elif menue == "Adressbuch":
         adressbuch_page.show()
+    elif menue == "💡 Feedback & Wünsche":
+        feedback_page.show()
