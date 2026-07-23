@@ -1,6 +1,7 @@
 import streamlit as st
 from database import supabase
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 def show():
     st.title("🚀 Changelog & Neuigkeiten")
@@ -53,8 +54,11 @@ def show():
         datum_formatiert = ""
         if datum_roh:
             try:
+                # UTC-Zeit von Supabase parsen
                 dt = datetime.fromisoformat(datum_roh.replace("Z", "+00:00"))
-                datum_formatiert = dt.strftime("%d.%m.%Y um %H:%M Uhr")
+                # In deutsche Ortszeit umwandeln (inkl. Sommer-/Winterzeit)
+                dt_lokal = dt.astimezone(ZoneInfo("Europe/Berlin"))
+                datum_formatiert = dt_lokal.strftime("%d.%m.%Y um %H:%M Uhr")
             except:
                 datum_formatiert = datum_roh[:10]
 
