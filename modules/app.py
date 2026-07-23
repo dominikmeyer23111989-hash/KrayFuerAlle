@@ -4,7 +4,7 @@ from modules.auth import (
     login_user, 
     finde_email_zu_benutzer, 
     passwort_zuruecksetzen_mit_sicherheitsfrage,
-    eltes_passwort_setzen if "eltes_passwort_setzen" in globals() else erstes_passwort_setzen
+    erstes_passwort_setzen
 )
 from modules import (
     finanzen_page, 
