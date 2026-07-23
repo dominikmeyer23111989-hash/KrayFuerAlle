@@ -94,7 +94,6 @@ def setze_rsvp(event_id, mitglied_id, status):
         "status": status
     }
     try:
-        # Nutzt Supabase Upsert anhand des Unique Keys (event_id, mitglied_id)
         response = supabase.table("event_rsvps").upsert(daten, on_conflict="event_id,mitglied_id").execute()
         return response.data
     except Exception as e:
@@ -164,3 +163,24 @@ def freigabe_loeschen(freigabe_id):
     except Exception as e:
         print(f"Freigabefehler: {e}")
         raise e
+
+
+# ==========================================
+# 6. HELFER-FUNKTIONEN (Für andere Module)
+# ==========================================
+
+def get_alle_mitglieder():
+    """Lädt alle Mitglieder aus der Supabase-Datenbank."""
+    try:
+        res = supabase.table("mitglieder").select("*").execute()
+        return res.data if res.data else []
+    except Exception as e:
+        print(f"Fehler beim Laden der Mitglieder: {e}")
+        return []
+
+def safe_val(data, key, default=""):
+    """Sicherer Zugriff auf Dictionary-Werte, um KeyError zu vermeiden."""
+    if isinstance(data, dict):
+        val = data.get(key)
+        return val if val is not None else default
+    return default
