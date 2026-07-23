@@ -14,7 +14,6 @@ from modules.inventar import formatiere_datum_fuer_anzeige
 
 def upload_to_dropbox(file_obj, file_name):
     """Lädt eine Datei direkt in deine Dropbox hoch und gibt den Freigabe-Link zurück."""
-    # Token aus den Streamlit-Secrets (oder Fallback direkt hier)
     token = st.secrets.get("DROPBOX_ACCESS_TOKEN", "sl.u.AGquFDbqPVy16K9Gk91VSsboQ5u86C5zpMGNYk6Y34Z4jNgkWV7g6QKW-tNwaaSuMyxO6n-y4jn4Z-JKU2a-aqdUKWiBFhMbSnqspDf3QwGv4E2ymTJkmXNddpA1q9NchBXSiTwdrg-0jED3b_hGZTdYNBUkQmVm_TtwEsdmOR2HXnGNimyMeg8EMW9EsEKN3cAnB3JsEi3iHhoxS1oQT7taxccu5QPWUT_D50e21g-vFDTkjTwa2T8Y7RwMcw2woaFBgTVIVMH-9yk2aij8JBqhofHKwOYGvZfjHHCoVasqZd6o2O3aZKgaHI85cBdeOvkUgJTV4lWYS4vf5b4w6CtMAyFK2ASoq9o0T9fz7JCoKZW7jiLennD12sslVmWvxNpCPAuVgXSlvnpZ6rRud_JKZ3XLzPOKjpfzKGRZVGEMRtBCcUZpkn21hpVKkbFY34Su7wfAq7PZjQgQUQmdSgwenhsiBm1xcpQbT5uj7x23JtAMEEVj5kZPvkKlKUAGBxduvH6RPAO_d6K5NfJ2sTtSCZG0d1mUACrwaZKA7BVZlFSYiNSpaanuLNruOpyh_Vda1X_efWk4-ivgmZErYkBEynl9uPSn7XU1DyLfZuTjDS0wjLQRtK3Esw1v38WX2ijKvs75K0wkTR2Khpt6p2VRLV8y1xL3sB7V3sD85R4GMX-Th4TngOkjhO0olkJQb6YSNPPktrqGoEPpcR-F_4-08HRa46FJLatwpNRH-bCYUeElVi0DUV_erUSNOSZ_Oa8bDrrX-K3pFgFY97bO5b78eRc7qtYP-372ZzYZhJa_qk2W4WDVh8JM6e9fG1OoclIfHlr6lGmMaF-zpLYn0q60lo-83z56M-jVh7y9IFtCb42LAjsOTYUj0H6LseoOvHi2hIqRNm2qwSQulCis7vcmD-ui7xhT8mv1v2yyNTITPcP33x9ZhQqqxgNIIjBSFADC0ycs_VbcJqlMmlbSD8kOaYjqXdslfr3ELKEjYUJ312vEnlp-CQe5T1-uFxHY405tkRq7rlcs4Irv5mUvZiA6RHMEL8gRpI8DPVj_0jsynfKQaGRHL83YUQYQtT1IkqUUSo3_LGpovy-wDI8dtW_RT2BT5cKanjCX5-9G14HakcPpZQqgHTaYm6BM7-wr-DgI3GUeytrohLgsrqMDn-6qOBkDTVoPCvy33MFAU5KV1r963II78RVcwKpVzxVuB97gokky4o7T_knY-jg3_ruOq0NdJqXHkgBp16QztIMZ8OlRtiaOQ57DvPeVDDnO_GbcSJkOliRtvYgUoCf2KgjXDh4LUdrieF-CrjT4HNk6YFX8-xhtbG2Gjs87_o4k1U9vJW4LaRj6LSc8AD1MsLRw51DSuOw_dHWAGk8I5rrD16j-euREP-vU8l5cRgoQuRSARghqAnefJkBDAWdOfauwWdDSXzozxCte21IhZok01f4h5cpOFbqeJv6df4QAGbo")
     dbx = dropbox.Dropbox(token)
     
@@ -29,7 +28,6 @@ def upload_to_dropbox(file_obj, file_name):
             links = dbx.sharing_get_shared_link_metadata(path)
             url = links.url
             
-        # Auf Direkt-Ansicht umschreiben (?dl=0 -> ?raw=1)
         url = url.replace("?dl=0", "?raw=1")
         return url
     except Exception as e:
@@ -43,9 +41,6 @@ def show():
     
     tab_geburtstage, tab_ehrungen = st.tabs(["🎁 Geburtstagsliste", "🏆 Ehrungen & Jubiläen"])
     
-    # ==========================================
-    # 1. GEBURTSTAGE
-    # ==========================================
     with tab_geburtstage:
         st.subheader("Anstehende Geburtstage")
         geburtstage = get_mitglieder_geburtstage()
@@ -63,9 +58,6 @@ def show():
         else:
             st.info("Keine Geburtsdaten in den Stammdaten hinterlegt. (Bitte in der Mitgliederverwaltung ergänzen).")
 
-    # ==========================================
-    # 2. EHRUNGEN
-    # ==========================================
     with tab_ehrungen:
         st.subheader("Verwaltung von Ehrungen & Jubiläen")
         
@@ -87,7 +79,6 @@ def show():
                 })
             st.dataframe(e_anzeige, use_container_width=True, hide_index=True)
             
-            # PDF Export für Ehrungsliste
             try:
                 pdf_bytes = generiere_ehrungen_pdf(ehrungen)
                 st.download_button(
@@ -102,7 +93,6 @@ def show():
                 
             st.divider()
             
-            # Urkunden Download / Einsicht für bestehende Ehrungen
             st.markdown("#### 📂 Urkunde ansehen / herunterladen")
             ehrungen_mit_dok = [e for e in ehrungen if safe_val(e, "dokument_url")]
             if ehrungen_mit_dok:
