@@ -4,7 +4,7 @@ from modules.auth import (
     login_user, 
     finde_email_zu_benutzer, 
     passwort_zuruecksetzen_mit_sicherheitsfrage,
-    first_passwort_setzen as erstes_passwort_setzen # (je nach deinem Import, einfach so lassen wie bei dir)
+    erstes_passwort_setzen
 )
 from modules import (
     finanzen_page, 
@@ -19,7 +19,7 @@ from modules import (
     feedback_page,
     ticker_component,
     changelog_page,
-    chat_page   # <--- 1. NEU: Chat-Modul importieren
+    chat_page
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -193,7 +193,7 @@ else:
     nav_optionen = [
         "Mitglieder & Rollen", 
         "Mitgliedsausweis", 
-        "💬 Vereins-Chat", # <--- 2. NEU: Chat in der Navigation
+        "💬 Vereins-Chat",
         "Inventar & Ausleihe", 
         "Events & Schichten", 
         "Kalender & Termine",
@@ -233,7 +233,7 @@ else:
         mitglieder_page.show()
     elif menue == "Mitgliedsausweis":
         ausweis_page.show()
-    elif menue == "💬 Vereins-Chat":  # <--- 3. NEU: Chat-Seite aufrufen
+    elif menue == "💬 Vereins-Chat":
         chat_page.show()
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
