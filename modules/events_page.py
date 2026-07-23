@@ -3,12 +3,10 @@ from datetime import datetime, time
 import pandas as pd
 import requests
 import io
-
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-
 from modules.events import (
     get_alle_events,
     event_erstellen,
@@ -80,6 +78,25 @@ def parse_time(t_str):
 def get_wetter_fuer_ort_und_datum(ort, datum_str):
     if not ort:
         ort = "Bochum"
+        
+    # Prüfen, ob das Datum mehr als 14 Tage in der Zukunft liegt
+    try:
+        if datum_str:
+            event_date = datetime.strptime(datum_str, "%Y-%m-%d").date()
+            heute = datetime.today().date()
+            tage_diff = (event_date - heute).days
+            
+            if tage_diff > 14:
+                return {
+                    "t_max": "-",
+                    "t_min": "-",
+                    "rain": "-",
+                    "beschreibung": "Erst ca. 14 Tage vor Event verfügbar",
+                    "icon": "⏳"
+                }
+    except Exception:
+        pass
+
     try:
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={requests.utils.quote(str(ort))}&count=1&language=de&format=json"
         geo_res = requests.get(geo_url, timeout=3).json()
@@ -322,9 +339,9 @@ def show():
                         if wetter_info:
                             w_cols = st.columns(4)
                             w_cols[0].metric("Zustand", f"{wetter_info['icon']} {wetter_info['beschreibung']}")
-                            w_cols[1].metric("Max. Temp.", f"{wetter_info['t_max']} °C")
-                            w_cols[2].metric("Min. Temp.", f"{wetter_info['t_min']} °C")
-                            w_cols[3].metric("Niederschlag", f"{wetter_info['rain']} mm")
+                            w_cols[1].metric("Max. Temp.", f"{wetter_info['t_max']} °C" if wetter_info['t_max'] != "-" else "-")
+                            w_cols[2].metric("Min. Temp.", f"{wetter_info['t_min']} °C" if wetter_info['t_min'] != "-" else "-")
+                            w_cols[3].metric("Niederschlag", f"{wetter_info['rain']} mm" if wetter_info['rain'] != "-" else "-")
                         
                         st.divider()
                         
