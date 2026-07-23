@@ -195,7 +195,8 @@ else:
         "Kalender & Termine",
         "Aufgaben & To-Dos",
         "Dokumente",
-        "Chronik"
+        "Chronik",
+        "💡 Feedback & Wünsche"  # <-- Hier wurde das Feedback-Modul hinzugefügt
     ]
     
     erlaubte_rollen_finanzen = ["admin", "administrator", "vorstand", "kassenwart"]
