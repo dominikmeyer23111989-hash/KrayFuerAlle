@@ -1,28 +1,31 @@
 import streamlit as str_alias
 from database import supabase
-from datetime import datetime
+from datetime import datetime, time
 import pandas as pd
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 import io
 
 def show():
-    str_alias.header("👥 Mitglieder- & Rollenverwaltung & Auswertung")
+    str_alias.header("👥 Mitglieder-, Rollen- & Abwesenheitsverwaltung")
     
     is_admin_or_vorstand = str_alias.session_state.get("user_rolle", "").lower() in ["admin", "administrator", "vorstand"]
     current_user_id = str_alias.session_state.get("user_id")
     
+    # Tabs dynamisch je nach Rolle anpassen (inkl. Abwesenheiten)
     if is_admin_or_vorstand:
-        tab_liste, tab_neu, tab_bearbeiten, tab_statistik = str_alias.tabs([
+        tab_liste, tab_neu, tab_bearbeiten, tab_statistik, tab_abw = str_alias.tabs([
             "📋 Mitgliederliste", 
             "➕ Neues Mitglied", 
             "⚙️ Bearbeiten & Löschen",
-            "📊 Auswertung & PDF"
+            "📊 Auswertung & PDF",
+            "📅 Abwesenheiten"
         ])
     else:
-        tab_liste, tab_bearbeiten = str_alias.tabs([
+        tab_liste, tab_bearbeiten, tab_abw = str_alias.tabs([
             "📋 Mitgliederliste", 
-            "👤 Mein Profil bearbeiten"
+            "👤 Mein Profil bearbeiten",
+            "📅 Abwesenheiten"
         ])
         tab_neu = None
         tab_statistik = None
@@ -60,7 +63,7 @@ def show():
         try:
             return datetime(jahr, monat, tag)
         except ValueError:
-            str_alias.error(f"Ungültiges Datum für {titel} (z.B. 31. im Februar). Bitte korrigieren.")
+            str_alias.error(f"Ungültiges Datum für {titel}. Bitte korrigieren.")
             return initial_date
 
     # Hilfsfunktion zur Altersberechnung
@@ -68,11 +71,7 @@ def show():
         if not geburtsdatum_str:
             return None
         try:
-            g_str = str(geburtsdatum_str)
-            if "T" in g_str:
-                g_str = g_str.split("T")[0]
-            elif " " in g_str:
-                g_str = g_str.split(" ")[0]
+            g_str = str(geburtsdatum_str).split("T")[0].split(" ")[0]
             geb_dat = datetime.strptime(g_str, "%Y-%m-%d")
             heute = datetime.today()
             return heute.year - geb_dat.year - ((heute.month, heute.day) < (geb_dat.month, geb_dat.day))
@@ -105,29 +104,16 @@ def show():
             
             if mitglieder:
                 for m in mitglieder:
-                    b_datum = m.get("beitrittsdatum")
-                    if b_datum:
-                        try:
-                            b_str = str(b_datum)
-                            if "T" in b_str: b_str = b_str.split("T")[0]
-                            elif " " in b_str: b_str = b_str.split(" ")[0]
-                            m["beitrittsdatum"] = datetime.strptime(b_str, "%Y-%m-%d").strftime("%d/%m/%Y")
-                        except Exception:
-                            pass
-                    
-                    g_datum = m.get("geburtsdatum")
-                    if g_datum:
-                        try:
-                            g_str = str(g_datum)
-                            if "T" in g_str: g_str = g_str.split("T")[0]
-                            elif " " in g_str: g_str = g_str.split(" ")[0]
-                            m["geburtsdatum"] = datetime.strptime(g_str, "%Y-%m-%d").strftime("%d/%m/%Y")
-                        except Exception:
-                            pass
+                    for feld in ["beitrittsdatum", "geburtsdatum"]:
+                        val = m.get(feld)
+                        if val:
+                            try:
+                                v_str = str(val).split("T")[0].split(" ")[0]
+                                m[feld] = datetime.strptime(v_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+                            except Exception:
+                                pass
 
-                col1, col2 = str_alias.columns([1, 3])
-                col1.metric("Gesamtmitglieder", len(mitglieder))
-                
+                str_alias.metric("Gesamtmitglieder", len(mitglieder))
                 str_alias.dataframe(
                     mitglieder, 
                     use_container_width=True,
@@ -136,7 +122,7 @@ def show():
                         "mitgliedsnummer": "Mitglieds-Nr",
                         "vorname": "Vorname",
                         "nachname": "Nachname",
-                        "geburtsdatum": "Geburtsdatum (DD/MM/YYYY)",
+                        "geburtsdatum": "Geburtsdatum",
                         "geschlecht": "Geschlecht",
                         "email": "E-Mail",
                         "telefonnummer": "Telefon",
@@ -144,7 +130,7 @@ def show():
                         "status": "Status",
                         "ist_gesperrt": "Gesperrt",
                         "hat_inventar_rechte": "Inventar-Rechte",
-                        "beitrittsdatum": "Eintritt (DD/MM/YYYY)"
+                        "beitrittsdatum": "Eintritt"
                     },
                     hide_index=True
                 )
@@ -159,16 +145,9 @@ def show():
     if is_admin_or_vorstand and tab_neu is not None:
         with tab_neu:
             str_alias.subheader("Neues Mitglied registrieren")
-            
             try:
                 res = supabase.table("mitglieder").select("mitgliedsnummer").execute()
-                existing_nums = set()
-                if res.data:
-                    for m in res.data:
-                        nr = m.get("mitgliedsnummer")
-                        if nr and str(nr).isdigit():
-                            existing_nums.add(int(nr))
-                
+                existing_nums = {int(m.get("mitgliedsnummer")) for m in (res.data or []) if m.get("mitgliedsnummer") and str(m.get("mitgliedsnummer")).isdigit()}
                 n = 1
                 while n in existing_nums:
                     n += 1
@@ -176,14 +155,10 @@ def show():
             except Exception:
                 naechste_nr = "1"
 
-            auto_nr_aktiv = str_alias.checkbox("Mitgliedsnummer automatisch vergeben (ab 1)", value=True, key="auto_nr_checkbox")
+            auto_nr_aktiv = str_alias.checkbox("Mitgliedsnummer automatisch vergeben", value=True, key="auto_nr_checkbox")
 
             with str_alias.form("neues_mitglied_form"):
-                if auto_nr_aktiv:
-                    str_alias.text_input("Mitgliedsnummer (automatisch)", value=naechste_nr, disabled=True, key="mitgliedsnummer_auto_display")
-                    final_mitgliedsnummer = naechste_nr
-                else:
-                    final_mitgliedsnummer = str_alias.text_input("Mitgliedsnummer (manuell eingeben)", value=naechste_nr, key="mitgliedsnummer_manuell_input")
+                final_mitgliedsnummer = naechste_nr if auto_nr_aktiv else str_alias.text_input("Mitgliedsnummer", value=naechste_nr)
 
                 col1, col2 = str_alias.columns(2)
                 with col1:
@@ -203,9 +178,7 @@ def show():
                     ist_gesperrt = str_alias.checkbox("Mitglied gesperrt")
                     inventar_rechte = str_alias.checkbox("Spezielle Inventar-Rechte vergeben")
                 
-                submitted = str_alias.form_submit_button("Mitglied speichern", type="primary")
-                
-                if submitted:
+                if str_alias.form_submit_button("Mitglied speichern", type="primary"):
                     if not vorname or not nachname:
                         str_alias.error("Vorname und Nachname sind Pflichtfelder!")
                     else:
@@ -215,8 +188,8 @@ def show():
                             "nachname": nachname,
                             "geburtsdatum": geburtsdatum_obj.strftime("%Y-%m-%d"),
                             "geschlecht": geschlecht,
-                            "email": email if email else None,
-                            "telefonnummer": telefon if telefon else None,
+                            "email": email or None,
+                            "telefonnummer": telefon or None,
                             "strasse": strasse,
                             "plz": plz,
                             "ort": ort,
@@ -228,10 +201,10 @@ def show():
                         }
                         try:
                             supabase.table("mitglieder").insert(neuer_datensatz).execute()
-                            str_alias.success(f"Mitglied {vorname} {nachname} (Nr. {final_mitgliedsnummer}) wurde erfolgreich angelegt!")
+                            str_alias.success(f"Mitglied {vorname} {nachname} erfolgreich angelegt!")
                             str_alias.rerun()
                         except Exception as e:
-                            str_alias.error(f"Fehler beim Speichern in Supabase: {e}")
+                            str_alias.error(f"Fehler beim Speichern: {e}")
 
     # ==========================================
     # 3. BEARBEITEN / MEIN PROFIL
@@ -240,20 +213,16 @@ def show():
         if is_admin_or_vorstand:
             str_alias.subheader("Mitglied bearbeiten oder löschen (Admin-Ansicht)")
             try:
-                res = supabase.table("mitglieder").select("id, mitgliedsnummer, vorname, nachname, email").execute()
+                res = supabase.table("mitglieder").select("id, mitgliedsnummer, vorname, nachname").execute()
                 mitglieder_liste = res.data if res.data else []
                 
                 if mitglieder_liste:
-                    auswahl_dict = {
-                        f"{m.get('mitgliedsnummer', '---')} - {m.get('vorname', '')} {m.get('nachname', '')}": m['id'] 
-                        for m in mitglieder_liste
-                    }
+                    auswahl_dict = {f"{m.get('mitgliedsnummer', '---')} - {m.get('vorname', '')} {m.get('nachname', '')}": m['id'] for m in mitglieder_liste}
                     gewähltes_label = str_alias.selectbox("Mitglied auswählen", options=list(auswahl_dict.keys()))
                     
                     if gewähltes_label:
                         selected_id = auswahl_dict[gewähltes_label]
-                        detail_res = supabase.table("mitglieder").select("*").eq("id", selected_id).single().execute()
-                        m_data = detail_res.data
+                        m_data = supabase.table("mitglieder").select("*").eq("id", selected_id).single().execute().data
                         
                         if m_data:
                             with str_alias.form("edit_mitglied_admin_form"):
@@ -268,9 +237,8 @@ def show():
                                     e_geburtsdatum = datum_auswahl("Geburtsdatum", "admin_edit_geb", g_val, 1900)
                                     
                                     akt_geschlecht = m_data.get("geschlecht", "männlich")
-                                    g_optionen = ["männlich", "weiblich", "divers"]
-                                    g_idx = g_optionen.index(akt_geschlecht) if akt_geschlecht in g_optionen else 0
-                                    e_geschlecht = str_alias.selectbox("Geschlecht", g_optionen, index=g_idx)
+                                    g_opt = ["männlich", "weiblich", "divers"]
+                                    e_geschlecht = str_alias.selectbox("Geschlecht", g_opt, index=g_opt.index(akt_geschlecht) if akt_geschlecht in g_opt else 0)
                                     
                                     e_email = str_alias.text_input("E-Mail", value=m_data.get("email", "") or "")
                                     e_telefon = str_alias.text_input("Telefonnummer", value=m_data.get("telefonnummer", "") or "")
@@ -284,14 +252,12 @@ def show():
                                     e_beitrittsdatum = datum_auswahl("Eintrittsdatum", "admin_edit_beitritt", b_val, 1900)
                                     
                                     aktuelle_rolle = m_data.get("rolle", "mitglied")
-                                    rollen_optionen = ["mitglied", "kassenwart", "vorstand", "admin"]
-                                    rollen_index = rollen_optionen.index(aktuelle_rolle) if aktuelle_rolle in rollen_optionen else 0
-                                    e_rolle = str_alias.selectbox("Rolle", rollen_optionen, index=rollen_index)
+                                    r_opt = ["mitglied", "kassenwart", "vorstand", "admin"]
+                                    e_rolle = str_alias.selectbox("Rolle", r_opt, index=r_opt.index(aktuelle_rolle) if aktuelle_rolle in r_opt else 0)
                                     
                                     aktueller_status = m_data.get("status", "aktiv")
-                                    status_optionen = ["aktiv", "passiv", "ehrenmitglied"]
-                                    status_index = status_optionen.index(aktueller_status) if aktueller_status in status_optionen else 0
-                                    e_status = str_alias.selectbox("Status", status_optionen, index=status_index)
+                                    s_opt = ["aktiv", "passiv", "ehrenmitglied"]
+                                    e_status = str_alias.selectbox("Status", s_opt, index=s_opt.index(aktueller_status) if aktueller_status in s_opt else 0)
                                     
                                     e_gesperrt = str_alias.checkbox("Mitglied gesperrt", value=m_data.get("ist_gesperrt", False))
                                     e_inventar = str_alias.checkbox("Inventar-Rechte", value=m_data.get("hat_inventar_rechte", False))
@@ -304,99 +270,68 @@ def show():
                                     
                                 if save_btn:
                                     update_daten = {
-                                        "mitgliedsnummer": e_mitgliedsnummer,
-                                        "vorname": e_vorname,
-                                        "nachname": e_nachname,
-                                        "geburtsdatum": e_geburtsdatum.strftime("%Y-%m-%d"),
-                                        "geschlecht": e_geschlecht,
-                                        "email": e_email if e_email else None,
-                                        "telefonnummer": e_telefon if e_telefon else None,
-                                        "strasse": e_strasse if e_strasse else None,
-                                        "plz": e_plz if e_plz else None,
-                                        "ort": e_ort if e_ort else None,
-                                        "beitrittsdatum": e_beitrittsdatum.strftime("%Y-%m-%d"),
-                                        "rolle": e_rolle,
-                                        "status": e_status,
-                                        "ist_gesperrt": e_gesperrt,
-                                        "hat_inventar_rechte": e_inventar
+                                        "mitgliedsnummer": e_mitgliedsnummer, "vorname": e_vorname, "nachname": e_nachname,
+                                        "geburtsdatum": e_geburtsdatum.strftime("%Y-%m-%d"), "geschlecht": e_geschlecht,
+                                        "email": e_email or None, "telefonnummer": e_telefon or None,
+                                        "strasse": e_strasse or None, "plz": e_plz or None, "ort": e_ort or None,
+                                        "beitrittsdatum": e_beitrittsdatum.strftime("%Y-%m-%d"), "rolle": e_rolle,
+                                        "status": e_status, "ist_gesperrt": e_gesperrt, "hat_inventar_rechte": e_inventar
                                     }
                                     try:
                                         supabase.table("mitglieder").update(update_daten).eq("id", selected_id).execute()
-                                        str_alias.success("Mitgliederdaten erfolgreich aktualisiert!")
+                                        str_alias.success("Daten aktualisiert!")
                                         str_alias.rerun()
                                     except Exception as e:
-                                        str_alias.error(f"Fehler beim Aktualisieren: {e}")
+                                        str_alias.error(f"Fehler: {e}")
                                         
                                 if delete_btn:
                                     try:
                                         supabase.table("mitglieder").delete().eq("id", selected_id).execute()
-                                        str_alias.success("Mitglied wurde erfolgreich gelöscht.")
+                                        str_alias.success("Mitglied gelöscht.")
                                         str_alias.rerun()
                                     except Exception as e:
-                                        str_alias.error(f"Fehler beim Löschen: {e}")
+                                        str_alias.error(f"Fehler: {e}")
                 else:
                     str_alias.info("Keine Mitglieder vorhanden.")
             except Exception as e:
-                str_alias.error(f"Fehler beim Laden der Mitgliederdaten: {e}")
+                str_alias.error(f"Fehler beim Laden: {e}")
         else:
             str_alias.subheader("Mein Profil bearbeiten")
-            if not current_user_id:
-                str_alias.error("Kein Benutzer-Kontext gefunden.")
-            else:
+            if current_user_id:
                 try:
-                    detail_res = supabase.table("mitglieder").select("*").eq("id", current_user_id).single().execute()
-                    m_data = detail_res.data
-                    
+                    m_data = supabase.table("mitglieder").select("*").eq("id", current_user_id).single().execute().data
                     if m_data:
                         with str_alias.form("edit_eigenes_profil_form"):
-                            str_alias.info("Du kannst deine persönlichen Daten hier anpassen. Die Mitgliedsnummer ist fest zugewiesen.")
                             str_alias.text_input("Mitgliedsnummer (gesperrt)", value=str(m_data.get("mitgliedsnummer", "")), disabled=True)
-                            
                             col1, col2 = str_alias.columns(2)
                             with col1:
                                 e_vorname = str_alias.text_input("Vorname", value=m_data.get("vorname", ""))
                                 e_nachname = str_alias.text_input("Nachname", value=m_data.get("nachname", ""))
-                                
                                 g_str = m_data.get("geburtsdatum")
                                 g_val = datetime.strptime(g_str.split("T")[0], "%Y-%m-%d") if g_str else datetime(1990, 1, 1)
                                 e_geburtsdatum = datum_auswahl("Geburtsdatum", "profil_edit_geb", g_val, 1900)
-                                
-                                akt_geschlecht = m_data.get("geschlecht", "männlich")
-                                g_optionen = ["männlich", "weiblich", "divers"]
-                                g_idx = g_optionen.index(akt_geschlecht) if akt_geschlecht in g_optionen else 0
-                                e_geschlecht = str_alias.selectbox("Geschlecht", g_optionen, index=g_idx)
-                                
+                                akt_g = m_data.get("geschlecht", "männlich")
+                                g_opt = ["männlich", "weiblich", "divers"]
+                                e_geschlecht = str_alias.selectbox("Geschlecht", g_opt, index=g_opt.index(akt_g) if akt_g in g_opt else 0)
                                 e_email = str_alias.text_input("E-Mail", value=m_data.get("email", "") or "")
                                 e_telefon = str_alias.text_input("Telefonnummer", value=m_data.get("telefonnummer", "") or "")
                             with col2:
                                 e_strasse = str_alias.text_input("Straße & Hausnummer", value=m_data.get("strasse", "") or "")
                                 e_plz = str_alias.text_input("PLZ", value=m_data.get("plz", "") or "")
                                 e_ort = str_alias.text_input("Ort", value=m_data.get("ort", "") or "")
-                                str_alias.text_input("Rolle (gesperrt)", value=m_data.get("rolle", "mitglied"), disabled=True)
-                                str_alias.text_input("Status (gesperrt)", value=m_data.get("status", "aktiv"), disabled=True)
                                 
-                            save_btn = str_alias.form_submit_button("Änderungen speichern", type="primary")
-                            
-                            if save_btn:
+                            if str_alias.form_submit_button("Änderungen speichern", type="primary"):
                                 update_daten = {
-                                    "vorname": e_vorname,
-                                    "nachname": e_nachname,
-                                    "geburtsdatum": e_geburtsdatum.strftime("%Y-%m-%d"),
-                                    "geschlecht": e_geschlecht,
-                                    "email": e_email if e_email else None,
-                                    "telefonnummer": e_telefon if e_telefon else None,
-                                    "strasse": e_strasse if e_strasse else None,
-                                    "plz": e_plz if e_plz else None,
-                                    "ort": e_ort if e_ort else None
+                                    "vorname": e_vorname, "nachname": e_nachname,
+                                    "geburtsdatum": e_geburtsdatum.strftime("%Y-%m-%d"), "geschlecht": e_geschlecht,
+                                    "email": e_email or None, "telefonnummer": e_telefon or None,
+                                    "strasse": e_strasse or None, "plz": e_plz or None, "ort": e_ort or None
                                 }
-                                try:
-                                    supabase.table("mitglieder").update(update_daten).eq("id", current_user_id).execute()
-                                    str_alias.success("Deine Profil-Daten wurden erfolgreich aktualisiert!")
-                                    str_alias.rerun()
-                                except Exception as e:
-                                    str_alias.error(f"Fehler beim Aktualisieren: {e}")
+                                supabase.table("mitglieder").update(update_daten).eq("id", current_user_id).execute()
+                                str_alias.success("Profil aktualisiert!")
+                                str_alias.rerun()
                 except Exception as e:
-                    str_alias.error(f"Fehler beim Laden deines Profils: {e}")
+                    str_alias.error(f"Fehler: {e}")
 
     # ==========================================
     # 4. AUSWERTUNG & PDF EXPORT (Nur Admin/Vorstand)
@@ -404,59 +339,45 @@ def show():
     if is_admin_or_vorstand and tab_statistik is not None:
         with tab_statistik:
             str_alias.subheader("📊 Mitglieder-Auswertung & Berichte")
-            
             try:
-                res = supabase.table("mitglieder").select("*").execute()
-                daten = res.data if res.data else []
-                
+                daten = supabase.table("mitglieder").select("*").execute().data or []
                 if daten:
                     df = pd.DataFrame(daten)
                     df["alter"] = df["geburtsdatum"].apply(berechne_alter)
                     df["altersgruppe"] = df["alter"].apply(get_altersgruppe)
                     
-                    col_wahl1, col_wahl2 = str_alias.columns(2)
-                    with col_wahl1:
-                        diagramm_typ = str_alias.radio("Diagramm-Typ wählen", ["Balkendiagramm", "Kreisdiagramm"])
-                    with col_wahl2:
-                        kategorie_wahl = str_alias.selectbox("Auswertung nach", ["Altersgruppen", "Geschlecht", "Status"])
+                    c1, c2 = str_alias.columns(2)
+                    diag_typ = c1.radio("Diagramm-Typ", ["Balkendiagramm", "Kreisdiagramm"])
+                    kategorie = c2.selectbox("Auswertung nach", ["Altersgruppen", "Geschlecht", "Status"])
                     
                     str_alias.divider()
-                    
-                    if kategorie_wahl == "Altersgruppen":
-                        reihenfolge = ["0-12 Jahre", "13-18 Jahre", "18-35 Jahre", "35-65 Jahre", "Über 65 Jahre", "Keine Angabe"]
-                        counts = df["altersgruppe"].value_counts().reindex(reihenfolge, fill_value=0)
-                        titel = "Altersverteilung der Mitglieder"
-                    elif kategorie_wahl == "Geschlecht":
-                        counts = df["geschlecht"].value_counts(dropna=False)
-                        counts.index = counts.index.fillna("Keine Angabe")
-                        titel = "Geschlechterverteilung der Mitglieder"
+                    if kategorie == "Altersgruppen":
+                        counts = df["altersgruppe"].value_counts().reindex(["0-12 Jahre", "13-18 Jahre", "18-35 Jahre", "35-65 Jahre", "Über 65 Jahre", "Keine Angabe"], fill_value=0)
+                        titel = "Altersverteilung"
+                    elif kategorie == "Geschlecht":
+                        counts = df["geschlecht"].value_counts(dropna=False).fillna("Keine Angabe")
+                        titel = "Geschlechterverteilung"
                     else:
-                        counts = df["status"].value_counts(dropna=False)
-                        counts.index = counts.index.fillna("Keine Angabe")
-                        titel = "Mitglieder-Statusverteilung"
+                        counts = df["status"].value_counts(dropna=False).fillna("Keine Angabe")
+                        titel = "Statusverteilung"
 
                     fig, ax = plt.subplots(figsize=(8, 5))
-                    if diagramm_typ == "Balkendiagramm":
+                    if diag_typ == "Balkendiagramm":
                         counts.plot(kind="bar", ax=ax, color="#1f77b4", edgecolor="black")
-                        ax.set_ylabel("Anzahl")
                         plt.xticks(rotation=45, ha="right")
                     else:
                         counts.plot(kind="pie", ax=ax, autopct="%1.1f%%", startangle=90, cmap="Pastel1")
                         ax.set_ylabel("")
-                        
                     ax.set_title(titel)
                     str_alias.pyplot(fig)
                     
                     str_alias.divider()
                     str_alias.subheader("📄 PDF-Bericht Export")
-                    str_alias.markdown("Generiere einen kompakten PDF-Gesamtbericht der Mitgliederliste und der statistischen Auswertung.")
                     
                     class PDF(FPDF):
                         def header(self):
                             self.set_font('helvetica', 'B', 15)
-                            self.cell(0, 10, 'Verein - Mitgliederbericht', 0, 1, 'C')
-                            self.ln(5)
-
+                            self.cell(0, 10, 'Mitgliederbericht', 0, 1, 'C')
                         def footer(self):
                             self.set_y(-15)
                             self.set_font('helvetica', 'I', 8)
@@ -465,70 +386,156 @@ def show():
                     def generate_pdf():
                         pdf = PDF()
                         pdf.add_page()
-                        
                         pdf.set_font('helvetica', 'B', 12)
-                        pdf.cell(0, 10, '1. Statistische Zusammenfassung', 0, 1)
-                        pdf.set_font('helvetica', '', 10)
-                        pdf.cell(0, 8, f'Gesamtanzahl Mitglieder: {len(df)}', 0, 1)
-                        pdf.ln(3)
-                        
-                        pdf.set_font('helvetica', 'B', 10)
-                        pdf.cell(0, 6, 'Altersgruppen:', 0, 1)
-                        pdf.set_font('helvetica', '', 10)
-                        for k, v in df["altersgruppe"].value_counts().items():
-                            pdf.cell(0, 6, f' - {k}: {v} Mitglieder', 0, 1)
-                            
-                        pdf.ln(3)
-                        pdf.set_font('helvetica', 'B', 10)
-                        pdf.cell(0, 6, 'Geschlechter:', 0, 1)
-                        pdf.set_font('helvetica', '', 10)
-                        for k, v in df["geschlecht"].value_counts(dropna=False).items():
-                            geschlecht_label = str(k) if k else "Keine Angabe"
-                            pdf.cell(0, 6, f' - {geschlecht_label}: {v} Mitglieder', 0, 1)
-
-                        pdf.ln(10)
-                        
-                        pdf.set_font('helvetica', 'B', 12)
-                        pdf.cell(0, 10, '2. Detaillierte Mitgliederliste', 0, 1)
+                        pdf.cell(0, 10, f'Gesamtanzahl Mitglieder: {len(df)}', 0, 1)
+                        pdf.ln(5)
+                        pdf.cell(0, 10, 'Mitgliederliste:', 0, 1)
                         pdf.set_font('helvetica', 'B', 9)
-                        
                         pdf.cell(15, 8, 'Nr', 1)
-                        pdf.cell(40, 8, 'Name', 1)
+                        pdf.cell(45, 8, 'Name', 1)
                         pdf.cell(30, 8, 'Status', 1)
-                        pdf.cell(45, 8, 'E-Mail', 1)
+                        pdf.cell(50, 8, 'E-Mail', 1)
                         pdf.cell(30, 8, 'Rolle', 1)
-                        pdf.cell(30, 8, 'Gesperrt', 1)
                         pdf.ln()
-                        
                         pdf.set_font('helvetica', '', 9)
                         for m in daten:
-                            nr = str(m.get("mitgliedsnummer", ""))
-                            name = f"{m.get('vorname', '')} {m.get('nachname', '')}"
-                            status = str(m.get("status", "aktiv"))
-                            mail = str(m.get("email", "") or "")
-                            rolle = str(m.get("rolle", ""))
-                            gesperrt = "Ja" if m.get("ist_gesperrt") else "Nein"
-                            
-                            pdf.cell(15, 7, nr, 1)
-                            pdf.cell(40, 7, name[:22], 1)
-                            pdf.cell(30, 7, status[:15], 1)
-                            pdf.cell(45, 7, mail[:24], 1)
-                            pdf.cell(30, 7, rolle[:15], 1)
-                            pdf.cell(30, 7, gesperrt, 1)
+                            pdf.cell(15, 7, str(m.get("mitgliedsnummer", "")), 1)
+                            pdf.cell(45, 7, f"{m.get('vorname', '')} {m.get('nachname', '')}"[:25], 1)
+                            pdf.cell(30, 7, str(m.get("status", ""))[:15], 1)
+                            pdf.cell(50, 7, str(m.get("email", "") or "")[:28], 1)
+                            pdf.cell(30, 7, str(m.get("rolle", ""))[:15], 1)
                             pdf.ln()
-                            
                         return bytes(pdf.output())
 
-                    pdf_data = generate_pdf()
-                    
-                    str_alias.download_button(
-                        label="📥 PDF-Gesamtbericht herunterladen",
-                        data=pdf_data,
-                        file_name=f"Mitgliederbericht_{datetime.today().strftime('%Y-%m-%d')}.pdf",
-                        mime="application/pdf",
-                        type="primary"
-                    )
+                    str_alias.download_button("📥 PDF-Bericht herunterladen", generate_pdf(), f"Mitgliederbericht_{datetime.today().strftime('%Y-%m-%d')}.pdf", "application/pdf", type="primary")
                 else:
-                    str_alias.info("Keine Daten für eine Auswertung vorhanden.")
+                    str_alias.info("Keine Daten vorhanden.")
             except Exception as e:
-                str_alias.error(f"Fehler bei der Auswertung oder PDF-Generierung: {e}")
+                str_alias.error(f"Fehler: {e}")
+
+    # ==========================================
+    # 5. ABWESENHEITEN (Neu gemäß Supabase Schema)
+    # ==========================================
+    with tab_abw:
+        str_alias.subheader("📅 Abwesenheiten & Urlaub")
+        
+        # Formular zum eintragen neuer Abwesenheiten
+        with str_alias.form("abwesenheit_form"):
+            str_alias.markdown("### Neue Abwesenheit eintragen")
+            
+            # Name des Mitglieds ermitteln
+            ein_name = ""
+            if current_user_id:
+                try:
+                    u_dat = supabase.table("mitglieder").select("vorname, nachname").eq("id", current_user_id).single().execute().data
+                    if u_dat:
+                        ein_name = f"{u_dat.get('vorname', '')} {u_dat.get('nachname', '')}".strip()
+                except Exception:
+                    pass
+            
+            if is_admin_or_vorstand:
+                # Admins können für alle oder sich selbst eintragen
+                try:
+                    alle_m = supabase.table("mitglieder").select("id, vorname, nachname").execute().data or []
+                    m_optionen = {f"{m.get('vorname')} {m.get('nachname')}": m.get('id') for m in alle_m}
+                    gew_name = str_alias.selectbox("Mitglied auswählen", list(m_optionen.keys()))
+                    final_user_id = m_optionen[gew_name] if gew_name else current_user_id
+                    final_mitglied_name = gew_name
+                except Exception:
+                    final_user_id = current_user_id or "admin"
+                    final_mitglied_name = ein_name or "Admin"
+            else:
+                final_user_id = current_user_id or "unbekannt"
+                final_mitglied_name = ein_name or "Mitglied"
+                str_alias.info(getragen_info := f"Eintrag für: **{final_mitglied_name}**")
+
+            c1, c2 = str_alias.columns(2)
+            with c1:
+                von_datum = str_alias.date_input("Von Datum", value=datetime.today())
+            with c2:
+                bis_datum = str_alias.date_input("Bis Datum", value=datetime.today())
+                
+            uhrzeit_aktiv = str_alias.checkbox("Nur bestimmte Uhrzeiten (z. B. Teildienst / Stundenweise)")
+            von_uhrzeit = None
+            bis_uhrzeit = None
+            
+            if uhrzeit_aktiv:
+                uc1, uc2 = str_alias.columns(2)
+                with uc1:
+                    von_uhrzeit = str_alias.time_input("Von Uhrzeit", value=time(8, 0))
+                with uc2:
+                    bis_uhrzeit = str_alias.time_input("Bis Uhrzeit", value=time(16, 0))
+            
+            grund = str_alias.selectbox("Grund / Art", ["Urlaub", "Krankheit", "Fortbildung / Lehrgang", "Dienstbefreiung", "Sonstiges"])
+            
+            if str_alias.form_submit_button("Abwesenheit speichern", type="primary"):
+                if bis_datum < von_datum:
+                    str_alias.error("Das Bis-Datum kann nicht vor dem Von-Datum liegen!")
+                else:
+                    payload = {
+                        "user_id": str(final_user_id),
+                        "mitglied_name": final_mitglied_name,
+                        "von_datum": von_datum.strftime("%Y-%m-%d"),
+                        "bis_datum": bis_datum.strftime("%Y-%m-%d"),
+                        "von_uhrzeit": von_uhrzeit.strftime("%H:%M:%S") if von_uhrzeit else None,
+                        "bis_uhrzeit": bis_uhrzeit.strftime("%H:%M:%S") if bis_uhrzeit else None,
+                        "grund": grund
+                    }
+                    try:
+                        supabase.table("abwesenheiten").insert(payload).execute()
+                        str_alias.success("Abwesenheit erfolgreich eingetragen!")
+                        str_alias.rerun()
+                    except Exception as e:
+                        str_alias.error(f"Fehler beim Speichern der Abwesenheit: {e}")
+
+        str_alias.divider()
+        str_alias.markdown("### 📋 Aktuelle & Kommende Abwesenheiten")
+        
+        try:
+            abw_res = supabase.table("abwesenheiten").select("*").order("von_datum", desc=False).execute()
+            abw_liste = abw_res.data if abw_res.data else []
+            
+            if abw_liste:
+                # Formatierung für die Anzeige
+                for a in abw_liste:
+                    for d_feld in ["von_datum", "bis_datum"]:
+                        if a.get(d_feld):
+                            try:
+                                a[d_feld] = datetime.strptime(str(a[d_feld]).split("T")[0], "%Y-%m-%d").strftime("%d.%m.%Y")
+                            except Exception:
+                                pass
+                
+                str_alias.dataframe(
+                    abw_liste,
+                    use_container_width=True,
+                    column_config={
+                        "id": "ID",
+                        "user_id": "User-ID",
+                        "mitglied_name": "Name",
+                        "von_datum": "Von",
+                        "bis_datum": "Bis",
+                        "von_uhrzeit": "Von Uhrzeit",
+                        "bis_uhrzeit": "Bis Uhrzeit",
+                        "grund": "Grund",
+                        "erstellt_am": "Erstellt am"
+                    },
+                    hide_index=True
+                )
+                
+                # Lösch-Option für Einträge
+                if is_admin_or_vorstand:
+                    str_alias.markdown("#### Abwesenheit löschen")
+                    loesch_dict = {f"{a.get('mitglied_name', 'Unbekannt')} ({a.get('von_datum')} bis {a.get('bis_datum')} - {a.get('grund')} )": a.get('id') for a in abw_liste}
+                    zu_loeschen = str_alias.selectbox("Eintrag zum Löschen wählen", options=list(loesch_dict.keys()))
+                    if str_alias.button("Ausgewählte Abwesenheit löschen", type="secondary"):
+                        try:
+                            target_id = loesch_dict[zu_loeschen]
+                            supabase.table("abwesenheiten").delete().eq("id", target_id).execute()
+                            str_alias.success("Abwesenheit gelöscht.")
+                            str_alias.rerun()
+                        except Exception as e:
+                            str_alias.error(f"Fehler beim Löschen: {e}")
+            else:
+                str_alias.info("Aktuell sind keine Abwesenheiten eingetragen.")
+        except Exception as e:
+            str_alias.error(f"Fehler beim Laden der Abwesenheiten: {e}")
