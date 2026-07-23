@@ -27,11 +27,11 @@ def zeige_ticker():
         ticker_text = data[0].get("text", "")
         if ticker_text.strip():
             st.markdown("---")
-            # Layout für Ticker-Banner und Schließen-Button
+            # Layout für Ticker-Banner und Schließen-Button (nutzt CSS-Variablen für perfekten Dark/Light-Mode Kontrast)
             col_text, col_close = st.columns([22, 1])
             with col_text:
                 st.markdown(f"""
-                    <div style="background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; border-left: 6px solid #ff4b4b; font-size: 14px;">
+                    <div style="background-color: var(--secondary-background-color); color: var(--text-color); padding: 10px 15px; border-radius: 8px; border-left: 6px solid #ff4b4b; font-size: 14px; border: 1px solid rgba(128, 128, 128, 0.2);">
                         <b>📢 Wichtige Ankündigung des Vorstands:</b> {ticker_text}
                     </div>
                 """, unsafe_allow_html=True)
