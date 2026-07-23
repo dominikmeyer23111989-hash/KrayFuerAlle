@@ -4,7 +4,7 @@ from modules.auth import (
     login_user, 
     finde_email_zu_benutzer, 
     passwort_zuruecksetzen_mit_sicherheitsfrage,
-    erstes_passwort_setzen
+    eltes_passwort_setzen if "eltes_passwort_setzen" in globals() else erstes_passwort_setzen
 )
 from modules import (
     finanzen_page, 
@@ -16,7 +16,8 @@ from modules import (
     dokumente_page, 
     ausweis_page,
     chronik_page,
-    feedback_page
+    feedback_page,
+    ticker_component
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -196,7 +197,7 @@ else:
         "Aufgaben & To-Dos",
         "Dokumente",
         "Chronik",
-        "💡 Feedback & Wünsche"  # <-- Hier wurde das Feedback-Modul hinzugefügt
+        "💡 Feedback & Wünsche"
     ]
     
     erlaubte_rollen_finanzen = ["admin", "administrator", "vorstand", "kassenwart"]
@@ -210,6 +211,9 @@ else:
     menue = st.sidebar.radio("Navigation", nav_optionen)
     
     st.sidebar.divider()
+    
+    # --- ADMIN TICKER BEREICH IN DER SIDEBAR ---
+    ticker_component.admin_ticker_bereich()
     
     if st.sidebar.button("🚗 Abmelden", use_container_width=True):
         st.session_state.logged_in = False
@@ -243,3 +247,6 @@ else:
         adressbuch_page.show()
     elif menue == "💡 Feedback & Wünsche":
         feedback_page.show()
+
+    # --- TICKER AM SEITENENDE ANZEIGEN ---
+    ticker_component.zeige_ticker()
