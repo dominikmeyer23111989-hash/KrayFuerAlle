@@ -19,7 +19,7 @@ def sende_admin_email(titel, nachricht, absender_name, kategorie):
         msg = MIMEMultipart()
         msg["From"] = sender_email
         msg["To"] = admin_email
-        msg["Subject"] = f"🔔 KrayFürAlle App: Neuer Eintrag [{kategorie}]"
+        msg["Subject"] = f"🔔 Vereins-App: Neuer Eintrag [{kategorie}]"
 
         body = f"""
 Hallo Admin,
@@ -49,10 +49,9 @@ Du kannst dich in der App einloggen, um den Eintrag zu bearbeiten.
         server.login(sender_email, sender_password)
         server.sendmail(sender_email, admin_email, msg.as_string())
         server.quit()
-        return True
+        return True, None
     except Exception as e:
-        print(f"E-Mail konnte nicht gesendet werden: {e}")
-        return False
+        return False, str(e)
 
 def show():
     st.markdown("""
@@ -73,17 +72,15 @@ def show():
     user_rolle = st.session_state.get("user_rolle", "").lower()
     ist_admin = user_rolle in ["admin", "administrator", "vorstand"]
 
-    # Tabs dynamisch erstellen, ohne None-Werte
+    # Tabs dynamisch erstellen
     if ist_admin:
         tab_senden, tab_postfach = st.tabs(["✍️ Nachricht senden", "📥 Admin-Postfach"])
     else:
         tab_senden = st.container()
         tab_postfach = None
-        # Falls man unbedingt st.tabs für normale Nutzer will, reicht ein einzelner Tab:
-        # [tab_senden] = st.tabs(["✍️ Nachricht senden"])
 
     # --- TAB 1: NACHRICHT SENDEN ---
-    with (tab_senden if not ist_admin else tab_senden): # Funktioniert für beide Fälle sauber
+    with tab_senden:
         st.subheader("Was hast du auf dem Herzen?")
         
         with st.form("feedback_form"):
@@ -118,11 +115,17 @@ def show():
                         supabase.table("feedback").insert(neuer_eintrag).execute()
                         
                         # 2. E-Mail an Admin senden
-                        sende_admin_email(titel.strip(), nachricht.strip(), absender, kategorie)
+                        email_erfolgreich, email_fehler = sende_admin_email(titel.strip(), nachricht.strip(), absender, kategorie)
                         
-                        st.success("Vielen Dank! Deine Nachricht wurde sicher übermittelt und der Admin wurde per E-Mail informiert. 🎉")
+                        if email_erfolgreich:
+                            st.success("Vielen Dank! Deine Nachricht wurde gespeichert und der Admin per E-Mail informiert. 🎉")
+                        else:
+                            st.success("Vielen Dank! Deine Nachricht wurde in der Web-App gespeichert.")
+                            st.warning(f"⚠️ Die E-Mail an den Admin konnte leider nicht gesendet werden. Technischer Fehler: `{email_fehler}`")
+                            st.info("💡 **Tipp:** Überprüfe deine SMTP-Zugangsdaten und Ports (z.B. App-Passwort bei Gmail) in den Streamlit Secrets (`.streamlit/secrets.toml`).")
+
                     except Exception as e:
-                        st.error(f"Fehler beim Senden: {e}")
+                        st.error(f"Fehler beim Speichern: {e}")
 
     # --- TAB 2: ADMIN POSTFACH ---
     if ist_admin and tab_postfach:
