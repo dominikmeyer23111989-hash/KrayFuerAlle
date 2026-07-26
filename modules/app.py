@@ -20,7 +20,8 @@ from modules import (
     ticker_component,
     changelog_page,
     chat_page,
-    geburtstage_ehrungen_page
+    geburtstage_ehrungen_page,
+    spiele_page  # Neu hinzugefügt
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -196,6 +197,7 @@ else:
         "Mitgliedsausweis", 
         "💬 Vereins-Chat",
         "🎂 Geburtstage & Ehrungen",
+        "🎮 Spiele",  # Hier eingefügt
         "Inventar & Ausleihe", 
         "Events & Schichten", 
         "Kalender & Termine",
@@ -239,6 +241,8 @@ else:
         chat_page.show()
     elif menue == "🎂 Geburtstage & Ehrungen":
         geburtstage_ehrungen_page.show()
+    elif menue == "🎮 Spiele":
+        spiele_page.show()  # Logik für die neue Seite aufrufen
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
     elif menue == "Events & Schichten":
