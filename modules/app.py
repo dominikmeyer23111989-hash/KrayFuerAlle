@@ -21,7 +21,7 @@ from modules import (
     changelog_page,
     chat_page,
     geburtstage_ehrungen_page,
-    spiele_page  # Neu hinzugefügt
+    spielplan_page  # <--- Hier angepasst
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -242,7 +242,7 @@ else:
     elif menue == "🎂 Geburtstage & Ehrungen":
         geburtstage_ehrungen_page.show()
     elif menue == "🎮 Spiele":
-        spiele_page.show()  # Logik für die neue Seite aufrufen
+        spielplan_page.show()  # Logik für die neue Seite aufrufen
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
     elif menue == "Events & Schichten":
