@@ -53,15 +53,15 @@ def show():
                     such_text = f"{k.get('vorname', '')} {k.get('nachname', '')} {k.get('kategorie', '')} {k.get('email', '')} {k.get('adresse', '')} {k.get('telefon', '')}".lower()
                     if not suchbegriff or suchbegriff.lower() in such_text:
                         gefilterte_kontakte.append({
-                            "Nachname": k.get("nachname", "-"),
-                            "Vorname": k.get("vorname", "-"),
-                            "Kategorie": k.get("kategorie", "-"),
-                            "Telefon": k.get("telefon", "-"),
-                            "E-Mail": k.get("email", "-"),
-                            "Adresse": k.get("adresse", "-"),
-                            "Zimmer": k.get("zimmer", "-"),
-                            "Erreichbarkeit": k.get("erreichbarkeit", "-"),
-                            "Fax": k.get("fax", "-")
+                            "Nachname": k.get("nachname", ""),
+                            "Vorname": k.get("vorname", ""),
+                            "Kategorie": k.get("kategorie", ""),
+                            "Telefon": k.get("telefon", ""),
+                            "E-Mail": k.get("email", ""),
+                            "Adresse": k.get("adresse", ""),
+                            "Zimmer": k.get("zimmer", ""),
+                            "Erreichbarkeit": k.get("erreichbarkeit", ""),
+                            "Fax": k.get("fax", "")
                         })
                 
                 st.metric("Gefundene Kontakte", len(gefilterte_kontakte))
@@ -76,12 +76,11 @@ def show():
         with tab_neu:
             st.subheader("Neuen Kontakt hinzufügen")
             
-            # WICHTIG: clear_on_submit=True leert das Formular nach dem Klick!
             with st.form("neuer_kontakt_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1:
                     vorname = st.text_input("Vorname")
-                    nachname = st.text_input("Nachname") # Pflichtfeld-Stern entfernt
+                    nachname = st.text_input("Nachname")
                     kategorie = st.text_input("Kategorie (z.B. Behörde, Lieferant, Vorstand, Partner)")
                     telefon = st.text_input("Telefonnummer")
                     fax = st.text_input("Fax")
@@ -94,30 +93,32 @@ def show():
                 submitted = st.form_submit_button("Kontakt speichern", type="primary")
                 
                 if submitted:
-                    # Keine Pflichtfeld-Abfrage mehr. Alles darf in die Datenbank.
+                    # Keine if/else Prüfung mehr auf None. 
+                    # Wenn ein Feld leer ist, wird einfach ein leerer Text ("") gespeichert.
+                    # Das verhindert Fehler in der Datenbank, falls diese keine NULL-Werte mag.
                     neuer_eintrag = {
-                        "vorname": vorname if vorname else None,
-                        "nachname": nachname if nachname else None,
-                        "kategorie": kategorie if kategorie else None,
-                        "telefon": telefon if telefon else None,
-                        "fax": fax if fax else None,
-                        "email": email if email else None,
-                        "adresse": adresse if adresse else None,
-                        "zimmer": zimmer if zimmer else None,
-                        "erreichbarkeit": erreichbarkeit if erreichbarkeit else None
+                        "vorname": vorname,
+                        "nachname": nachname,
+                        "kategorie": kategorie,
+                        "telefon": telefon,
+                        "fax": fax,
+                        "email": email,
+                        "adresse": adresse,
+                        "zimmer": zimmer,
+                        "erreichbarkeit": erreichbarkeit
                     }
                     try:
                         kontakt_hinzufuegen(neuer_eintrag)
+                        
                         # Name für die Erfolgsmeldung generieren (falls alles leer ist)
                         anzeige_name = f"{vorname} {nachname}".strip()
                         if not anzeige_name:
-                            anzeige_name = "Unbekannt"
+                            anzeige_name = "Unbenannter Kontakt"
                             
                         st.session_state["adressbuch_msg"] = {"type": "success", "text": f"Kontakt '{anzeige_name}' erfolgreich hinzugefügt!"}
                         st.rerun()
                     except Exception as e:
-                        # Bei einem Fehler machen wir KEINEN rerun, damit das Formular ausgefüllt bleibt
-                        st.error(f"Fehler beim Speichern: {e}")
+                        st.error(f"Fehler beim Speichern in der Datenbank: {e}")
 
     # ==========================================
     # 3. KONTAKT BEARBEITEN / LÖSCHEN
@@ -128,13 +129,14 @@ def show():
             kontakte = get_alle_kontakte()
             
             if kontakte:
-                kontakt_dict = {f"{k.get('nachname', 'k.A.')}, {k.get('vorname', '')} (Kat: {k.get('kategorie', 'k.A.')}) - ID: {k.get('id')}": k for k in kontakte}
+                # Fallback, falls Kontakte gar keinen Namen haben
+                kontakt_dict = {f"{k.get('nachname', '')}, {k.get('vorname', '')} (Kat: {k.get('kategorie', '')}) - ID: {k.get('id')}": k for k in kontakte}
                 auswahl = st.selectbox("Kontakt auswählen", options=list(kontakt_dict.keys()))
                 selected_kontakt = kontakt_dict[auswahl]
                 
                 with st.form("edit_kontakt_form"):
                     e_vorname = st.text_input("Vorname", value=selected_kontakt.get("vorname", "") or "")
-                    e_nachname = st.text_input("Nachname", value=selected_kontakt.get("nachname", "") or "") # Stern entfernt
+                    e_nachname = st.text_input("Nachname", value=selected_kontakt.get("nachname", "") or "")
                     e_kategorie = st.text_input("Kategorie", value=selected_kontakt.get("kategorie", "") or "")
                     
                     col1, col2 = st.columns(2)
@@ -154,17 +156,17 @@ def show():
                         delete_btn = st.form_submit_button("Kontakt löschen", type="secondary")
                         
                     if update_btn:
-                        # Auch hier: Keine Pflichtfelder mehr
+                        # Auch hier: Direkte Übergabe der Strings, kein "None" mehr.
                         update_daten = {
-                            "vorname": e_vorname if e_vorname else None,
-                            "nachname": e_nachname if e_nachname else None,
-                            "kategorie": e_kategorie if e_kategorie else None,
-                            "telefon": e_telefon if e_telefon else None,
-                            "fax": e_fax if e_fax else None,
-                            "email": e_email if e_email else None,
-                            "adresse": e_adresse if e_adresse else None,
-                            "zimmer": e_zimmer if e_zimmer else None,
-                            "erreichbarkeit": e_erreichbarkeit if e_erreichbarkeit else None
+                            "vorname": e_vorname,
+                            "nachname": e_nachname,
+                            "kategorie": e_kategorie,
+                            "telefon": e_telefon,
+                            "fax": e_fax,
+                            "email": e_email,
+                            "adresse": e_adresse,
+                            "zimmer": e_zimmer,
+                            "erreichbarkeit": e_erreichbarkeit
                         }
                         try:
                             kontakt_aktualisieren(selected_kontakt.get("id"), update_daten)
