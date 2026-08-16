@@ -29,6 +29,17 @@ def show():
 
     st.header("💰 Finanzen & Kassenbuch")
     
+    # ==========================================
+    # ZENTRALES NACHRICHTEN-SYSTEM (Nach dem Rerun)
+    # ==========================================
+    if "finanzen_msg" in st.session_state:
+        msg = st.session_state["finanzen_msg"]
+        if msg["type"] == "success":
+            st.success(msg["text"])
+        elif msg["type"] == "error":
+            st.error(msg["text"])
+        del st.session_state["finanzen_msg"]
+    
     # 1. Rechteprüfung (Nur Admin, Vorstand, Kassenwart)
     user_rolle = st.session_state.get("user_rolle", "").lower()
     erlaubte_rollen = ["admin", "administrator", "vorstand", "kassenwart"]
@@ -195,10 +206,10 @@ def show():
                                 }
                                 supabase.table("kassenbuch_log").insert(log_eintrag).execute()
                                 
-                                st.success("Buchung aktualisiert und im Logbuch vermerkt!")
+                                st.session_state["finanzen_msg"] = {"type": "success", "text": "Die Buchung wurde erfolgreich aktualisiert!"}
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Fehler: {e}")
+                                st.error(f"Fehler beim Speichern: {e}")
                                 
                         if btn_loeschen:
                             try:
@@ -209,13 +220,12 @@ def show():
                                     "durchgefuehrt_von": aktueller_user
                                 }
                                 supabase.table("kassenbuch_log").insert(log_eintrag).execute()
-                                
                                 supabase.table("kassenbuch").delete().eq("id", ausgewaehlte_id).execute()
                                 
-                                st.success("Buchung wurde gelöscht und im Logbuch dokumentiert.")
+                                st.session_state["finanzen_msg"] = {"type": "success", "text": "Die Buchung wurde erfolgreich gelöscht!"}
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Fehler: {e}")
+                                st.error(f"Fehler beim Löschen: {e}")
                 else:
                     st.info("Keine Buchungen für den Zeitraum verfügbar.")
         else:
@@ -235,7 +245,7 @@ def show():
 
         mitglied_optionen = {f"{m['vorname']} {m['nachname']} (Nr: {m.get('mitgliedsnummer', 'N/A')})": m['id'] for m in mitglieder_liste}
         
-        with st.form("kassenbuch_form"):
+        with st.form("kassenbuch_form", clear_on_submit=True):
             buchungs_datum = st.date_input("Buchungsdatum", value=datetime.today(), format="DD.MM.YYYY")
             typ = st.selectbox("Buchungstyp", ["Einnahme", "Ausgabe"])
             betrag = st.number_input("Betrag in €", min_value=0.01, step=1.00, format="%.2f")
@@ -283,10 +293,10 @@ def show():
                     }
                     try:
                         supabase.table("kassenbuch").insert(neue_buchung).execute()
-                        st.success(f"Buchung über {betrag:.2f} € gespeichert!")
+                        st.session_state["finanzen_msg"] = {"type": "success", "text": f"Buchung über {betrag:.2f} € erfolgreich gespeichert!"}
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Fehler: {e}")
+                        st.error(f"Fehler beim Speichern der Buchung: {e}")
 
     # ==========================================
     # TAB 3: BEITRÄGE & ZAHLUNGSSTATUS
@@ -305,13 +315,13 @@ def show():
                 df_saetze = pd.DataFrame(saetze)
                 st.dataframe(df_saetze[["typ", "betrag"]], hide_index=True, use_container_width=True)
 
-            with st.form("satz_form"):
+            with st.form("satz_form", clear_on_submit=True):
                 s_typ = st.text_input("Bezeichnung (z.B. Vollmitglied)")
                 s_betrag = st.number_input("Betrag in €", min_value=0.0, step=5.0)
                 if st.form_submit_button("Satz speichern", use_container_width=True) and s_typ:
                     try:
                         supabase.table("beitragssaetze").upsert({"typ": s_typ.strip(), "betrag": float(s_betrag)}, on_conflict="typ").execute()
-                        st.success("Gespeichert!")
+                        st.session_state["finanzen_msg"] = {"type": "success", "text": "Beitragssatz erfolgreich gespeichert!"}
                         st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
@@ -364,7 +374,7 @@ def show():
             st.dataframe(df_status[["Nr", "Name", "Status", "Betrag"]], use_container_width=True, hide_index=True)
 
             st.markdown("### ⚡ Schnell-Buchung")
-            with st.form("schnell_bezahlt_form"):
+            with st.form("schnell_bezahlt_form", clear_on_submit=True):
                 offene_mitglieder = {f"{m['Name']} (Nr: {m['Nr']})": m['id'] for m in status_daten if "Offen" in m["Status"]}
                 if offene_mitglieder:
                     w_mitglied = st.selectbox("Mitglied (Offen)", list(offene_mitglieder.keys()))
@@ -397,7 +407,7 @@ def show():
                     }
                     try:
                         supabase.table("kassenbuch").insert(neue_einnahme).execute()
-                        st.success("Verbucht!")
+                        st.session_state["finanzen_msg"] = {"type": "success", "text": f"Beitrag für {m_voller_name} erfolgreich verbucht!"}
                         st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
