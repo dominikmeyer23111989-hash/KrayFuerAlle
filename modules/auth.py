@@ -1,4 +1,5 @@
 import streamlit as st
+import requests
 from supabase import create_client
 from supabase.lib.client_options import ClientOptions
 from database import supabase
@@ -7,8 +8,6 @@ from database import supabase
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_KEY"]
 
-# WICHTIG: Die ClientOptions verhindern Session-Persistenz und Token-Refresh für den Admin-Client,
-# damit die Admin-Endpunkte (create_user, update_user_by_id) fehlerfrei greifen.
 supabase_admin = create_client(
     SUPABASE_URL, 
     SUPABASE_SERVICE_ROLE_KEY,
@@ -113,16 +112,25 @@ def erstes_passwort_setzen(identifier, password):
         member = res.data
         email = member.get("email") if member.get("email") else f"{member['mitgliedsnummer']}@krayfueralle.intern"
         
-        try:
-            supabase_admin.auth.admin.create_user({
-                "email": email, 
-                "password": password,
-                "email_confirm": True
-            })
-        except Exception as auth_err:
-            err_str = str(auth_err)
-            if "already registered" not in err_str.lower():
-                return False, f"Auth-Fehler: {err_str}"
+        # Direkter REST-Aufruf zur Umgehung des supabase-py Client-Bugs
+        url = f"{SUPABASE_URL}/auth/v1/admin/users"
+        headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "email": email, 
+            "password": password,
+            "email_confirm": True
+        }
+        
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code not in [200, 201]:
+            err_data = response.json()
+            err_msg = err_data.get("msg") or err_data.get("message") or response.text
+            if "already registered" not in err_msg.lower():
+                return False, f"Auth-Fehler: {err_msg}"
         
         try:
             supabase.table("benutzer").upsert({
