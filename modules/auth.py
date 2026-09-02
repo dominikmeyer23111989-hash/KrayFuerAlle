@@ -1,10 +1,11 @@
+import streamlit as st
 from supabase import create_client
 from supabase.lib.client_options import ClientOptions
 from database import supabase
 
 # --- ADMIN CLIENT SETUP ---
-SUPABASE_URL = "https://ythubjdnercyeyfedsam.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0aHViamRuZXJjeWV5ZmVkc2FtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzUyODM1OCwiZXhwIjoyMDk5MTA0MzU4fQ.l5IzgnUsLOKwSM-sSk_fziY9U85f8Duc097puSSsleM"
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_KEY"]
 
 # WICHTIG: Die ClientOptions verhindern Session-Persistenz und Token-Refresh für den Admin-Client,
 # damit die Admin-Endpunkte (create_user, update_user_by_id) fehlerfrei greifen.
