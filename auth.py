@@ -1,50 +1,36 @@
 from database import supabase
 
 def finde_email_zu_benutzer(identifier):
-    """
-    Ermittelt die zugehörige E-Mail-Adresse oder interne Auth-Kennung 
-    zuerst aus der 'benutzer'-Tabelle (nach Benutzername) und danach aus 'mitglieder'.
-    """
     if not identifier:
         return None
-        
     identifier_str = str(identifier).strip()
-    print(f"\n--- [DEBUG LOGIN] Suche nach: '{identifier_str}' ---")
     
-    # 0. Zuerst in der 'benutzer'-Tabelle nach dem Benutzernamen suchen (z.B. "admin")
     try:
         res_benutzer = supabase.table("benutzer").select("email, benutzername").ilike("benutzername", identifier_str).maybe_single().execute()
-        if res_benutzer and res_benutzer.data:
-            print("[Debug] Treffer in 'benutzer'-Tabelle via Benutzername!")
-            if res_benutzer.data.get("email"):
-                return res_benutzer.data["email"]
-    except Exception as e:
-        print(f"[Debug] Fehler bei Benutzername-Suche übersprungen: {e}")
+        if res_benutzer and res_benutzer.data and res_benutzer.data.get("email"):
+            return res_benutzer.data["email"]
+    except Exception:
+        pass
 
-    # 1. Suche nach E-Mail (case-insensitive) in 'mitglieder'
     try:
         res = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").ilike("email", identifier_str).maybe_single().execute()
         if res and res.data:
-            print("[Debug] Treffer in 'mitglieder' via E-Mail!")
             if res.data.get("email"): 
                 return res.data["email"]
             return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
-    except Exception as e:
-        print(f"[Debug] Fehler bei E-Mail-Suche übersprungen: {e}")
+    except Exception:
+        pass
 
-    # 2. Suche nach Mitgliedsnummer (wenn numerisch) in 'mitglieder'
     if identifier_str.isdigit():
         try:
             res = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").eq("mitgliedsnummer", int(identifier_str)).maybe_single().execute()
             if res and res.data:
-                print("[Debug] Treffer in 'mitglieder' via Mitgliedsnummer!")
                 if res.data.get("email"): 
                     return res.data["email"]
                 return f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
-        except Exception as e:
-            print(f"[Debug] Fehler bei Mitgliedsnummer-Suche übersprungen: {e}")
+        except Exception:
+            pass
 
-    # 3. Flexible Telefonnummern-Suche in 'mitglieder'
     try:
         res_tel = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").not_("telefonnummer", "is", "null").execute()
         if res_tel and res_tel.data:
@@ -52,53 +38,48 @@ def finde_email_zu_benutzer(identifier):
             if clean_input:
                 for row in res_tel.data:
                     db_tel = row.get("telefonnummer")
-                    if db_tel:
-                        clean_db = "".join(filter(str.isdigit, str(db_tel)))
-                        if clean_input == clean_db:
-                            print(f"[Debug] Treffer in 'mitglieder' via Telefon ({db_tel})!")
-                            if row.get("email"): 
-                                return row["email"]
-                            return f"{row['mitgliedsnummer']}@krayfueralle.intern"
-    except Exception as e:
-        print(f"[Debug] Fehler bei Telefon-Suche: {e}")
+                    if db_tel and clean_input == "".join(filter(str.isdigit, str(db_tel))):
+                        if row.get("email"): 
+                            return row["email"]
+                        return f"{row['mitgliedsnummer']}@krayfueralle.intern"
+    except Exception:
+        pass
         
-    print("[Debug] --- NICHT GEFUNDEN ---")
     return None
 
 def login_user(identifier, password):
-    """Login-Prozess mit genauer Fehlerausgabe im Terminal."""
     email = finde_email_zu_benutzer(identifier)
-    print( gefundene E-Mail für Login: {email})
-    
     if not email:
-        return {"success": False, "message": "Benutzername, Telefon oder Mitgliedsnummer nicht gefunden."}
+        return {"success": False, "message": f"Benutzer '{identifier}' wurde nicht gefunden."}
+
+    try:
+        query = supabase.table("mitglieder").select("ist_gesperrt")
+        if "@krayfueralle.intern" in email:
+            m_nr = email.split("@")[0]
+            res_gesperrt = query.eq("mitgliedsnummer", int(m_nr) if m_nr.isdigit() else m_nr).maybe_single().execute()
+        else:
+            res_gesperrt = query.ilike("email", email).maybe_single().execute()
+
+        if res_gesperrt and res_gesperrt.data and res_gesperrt.data.get("ist_gesperrt", False):
+            return {"success": False, "message": "Dieses Konto ist gesperrt."}
+    except Exception:
+        pass
 
     try:
         auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        print(" Login bei Supabase erfolgreich!")
         return {"success": True, "data": auth_response}
     except Exception as e: 
-        print(f"❌ AUTH-FEHLER DIREKT VON SUPABASE: {e}")
-        return {"success": False, "message": f"Login fehlgeschlagen: {e}"}
+        return {"success": False, "message": f"Login-Fehler: {str(e)}"}
 
 def erstes_passwort_setzen(identifier, password):
-    """
-    1. Prüft, ob das Mitglied in der 'mitglieder'-Tabelle existiert.
-    2. Erstellt den Auth-Account direkt als bestätigt (umgeht E-Mail-Bestätigung via Admin API).
-    3. Trägt das Mitglied sicher in die 'benutzer'-Tabelle ein (mit upsert).
-    """
     try:
         identifier_str = str(identifier).strip()
         res = None
         
-        # A) E-Mail Suche
         res = supabase.table("mitglieder").select("*").ilike("email", identifier_str).maybe_single().execute()
-        
-        # B) Mitgliedsnummer Suche
         if (not res or not res.data) and identifier_str.isdigit():
             res = supabase.table("mitglieder").select("*").eq("mitgliedsnummer", int(identifier_str)).maybe_single().execute()
             
-        # C) Telefonnummer Suche
         if not res or not res.data:
             res_tel = supabase.table("mitglieder").select("*").not_("telefonnummer", "is", "null").execute()
             if res_tel and res_tel.data:
@@ -109,40 +90,36 @@ def erstes_passwort_setzen(identifier, password):
                         break
         
         if not res or not res.data:
-            return False, "Mitgliedsdaten nicht gefunden. Bitte Vorstand kontaktieren."
+            return False, f"Mitglied mit Kennung '{identifier}' existiert nicht!"
         
         member = res.data
         email = member.get("email") if member.get("email") else f"{member['mitgliedsnummer']}@krayfueralle.intern"
         
-        # 1. Auth-Account per Admin-API anlegen (Sofort aktiv / bestätigt, keine Bestätigungsmail nötig)
         try:
             supabase.auth.admin.create_user({
                 "email": email, 
                 "password": password,
-                "email_confirm": True  # Verhindert, dass der User unbestätigt bleibt und der Login fehlschlägt!
+                "email_confirm": True
             })
-        except Exception as e:
-            if "already registered" not in str(e).lower():
-                return False, f"Auth-Fehler: {str(e)}"
+        except Exception as auth_err:
+            err_str = str(auth_err)
+            if "already registered" not in err_str.lower():
+                return False, f"Auth-Fehler: {err_str}"
         
-        # 2. In 'benutzer'-Tabelle eintragen (upsert verhindert Duplikat-Crashs)
         try:
             supabase.table("benutzer").upsert({
                 "email": email,
                 "benutzername": str(member["mitgliedsnummer"])
             }, on_conflict="email").execute()
-        except Exception as e:
-            return False, f"Datenbank-Fehler beim User-Anlegen: {str(e)}"
+        except Exception as db_err:
+            return False, f"Datenbank-Fehler: {str(db_err)}"
         
-        return True, "Account erfolgreich aktiviert! Du kannst dich jetzt einloggen."
+        return True, "Account erfolgreich aktiviert!"
         
     except Exception as e:
-        return False, f"Allgemeiner Fehler: {str(e)}"
+        return False, f"Unerwarteter Fehler: {str(e)}"
 
 def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passwort):
-    """
-    Prüft die Sicherheitsantwort direkt über die 'mitglieder'-Tabelle und setzt das Passwort zurück.
-    """
     identifier_str = str(identifier).strip()
     res = None
     try:
@@ -177,11 +154,9 @@ def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passw
         return False, f"Fehler: {str(e)}"
 
 def passwort_zuruecksetzen(identifier):
-    """Sendet Reset-Link, sofern eine echte E-Mail hinterlegt ist."""
     email = finde_email_zu_benutzer(identifier)
-    
     if not email or "@krayfueralle.intern" in email:
-        return False, "Für dieses Konto ist keine echte E-Mail hinterlegt. Bitte wende dich an den Vorstand."
+        return False, "Für dieses Konto ist keine echte E-Mail hinterlegt."
         
     try:
         supabase.auth.reset_password_email(email)
@@ -190,7 +165,6 @@ def passwort_zuruecksetzen(identifier):
         return False, f"Fehler: {str(e)}"
 
 def update_user_role(mitgliedsnummer, neue_rolle):
-    """Ändert die Rolle eines Mitglieds."""
     try:
         supabase.table("mitglieder").update({
             "rolle": neue_rolle
