@@ -1,20 +1,16 @@
 import streamlit as st
 import requests
 from supabase import create_client
-from supabase.lib.client_options import ClientOptions
 from database import supabase
 
 # --- ADMIN CLIENT SETUP ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_KEY"]
 
+# WICHTIG: Keine Optionen mehr übergeben! Das behebt den Absturz.
 supabase_admin = create_client(
     SUPABASE_URL, 
-    SUPABASE_SERVICE_ROLE_KEY,
-    options=ClientOptions(
-        auto_refresh_token=False,
-        persist_session=False,
-    )
+    SUPABASE_SERVICE_ROLE_KEY
 )
 
 def finde_email_zu_benutzer(identifier):
