@@ -66,35 +66,20 @@ def finde_email_zu_benutzer(identifier):
     return None
 
 def login_user(identifier, password):
-    """Login-Prozess inklusive Prüfung auf Inaktivität/Sperre."""
+    """Login-Prozess mit genauer Fehlerausgabe im Terminal."""
     email = finde_email_zu_benutzer(identifier)
+    print( gefundene E-Mail für Login: {email})
     
     if not email:
         return {"success": False, "message": "Benutzername, Telefon oder Mitgliedsnummer nicht gefunden."}
 
-    # Prüfen, ob das Mitglied inaktiv / gesperrt ist
-    try:
-        query = supabase.table("mitglieder").select("ist_gesperrt")
-        if "@krayfueralle.intern" in email:
-            m_nr = email.split("@")[0]
-            if m_nr.isdigit():
-                res_gesperrt = query.eq("mitgliedsnummer", int(m_nr)).maybe_single().execute()
-            else:
-                res_gesperrt = query.eq("mitgliedsnummer", m_nr).maybe_single().execute()
-        else:
-            res_gesperrt = query.ilike("email", email).maybe_single().execute()
-
-        if res_gesperrt and res_gesperrt.data and res_gesperrt.data.get("ist_gesperrt", False):
-            return {"success": False, "message": "Dieses Konto ist inaktiv / gesperrt. Ein Login ist nicht möglich."}
-    except Exception as e:
-        print(f"[Debug] Sperr-Prüfung Fehler: {e}")
-
     try:
         auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        print(" Login bei Supabase erfolgreich!")
         return {"success": True, "data": auth_response}
     except Exception as e: 
-        print(f"[Debug] Auth-Fehler: {e}")
-        return {"success": False, "message": "Passwort falsch oder Login fehlgeschlagen."}
+        print(f"❌ AUTH-FEHLER DIREKT VON SUPABASE: {e}")
+        return {"success": False, "message": f"Login fehlgeschlagen: {e}"}
 
 def erstes_passwort_setzen(identifier, password):
     """
