@@ -46,7 +46,6 @@ def finde_email_zu_benutzer(identifier):
 
     # 3. Flexible Telefonnummern-Suche in 'mitglieder'
     try:
-        # KORREKTUR: .not_("telefonnummer", "is", "null")
         res_tel = supabase.table("mitglieder").select("email, mitgliedsnummer, telefonnummer").not_("telefonnummer", "is", "null").execute()
         if res_tel and res_tel.data:
             clean_input = "".join(filter(str.isdigit, identifier_str))
@@ -100,23 +99,22 @@ def login_user(identifier, password):
 def erstes_passwort_setzen(identifier, password):
     """
     1. Prüft, ob das Mitglied in der 'mitglieder'-Tabelle existiert.
-    2. Erstellt Auth-Account.
-    3. Trägt das Mitglied in die 'benutzer'-Tabelle ein.
+    2. Erstellt den Auth-Account direkt als bestätigt (umgeht E-Mail-Bestätigung via Admin API).
+    3. Trägt das Mitglied sicher in die 'benutzer'-Tabelle ein (mit upsert).
     """
     try:
         identifier_str = str(identifier).strip()
         res = None
         
-        # A) E-Mail
+        # A) E-Mail Suche
         res = supabase.table("mitglieder").select("*").ilike("email", identifier_str).maybe_single().execute()
         
-        # B) Mitgliedsnummer
+        # B) Mitgliedsnummer Suche
         if (not res or not res.data) and identifier_str.isdigit():
             res = supabase.table("mitglieder").select("*").eq("mitgliedsnummer", int(identifier_str)).maybe_single().execute()
             
-        # C) Telefonnummer
+        # C) Telefonnummer Suche
         if not res or not res.data:
-            # KORREKTUR: .not_("telefonnummer", "is", "null")
             res_tel = supabase.table("mitglieder").select("*").not_("telefonnummer", "is", "null").execute()
             if res_tel and res_tel.data:
                 clean_input = "".join(filter(str.isdigit, identifier_str))
@@ -131,19 +129,25 @@ def erstes_passwort_setzen(identifier, password):
         member = res.data
         email = member.get("email") if member.get("email") else f"{member['mitgliedsnummer']}@krayfueralle.intern"
         
+        # 1. Auth-Account per Admin-API anlegen (Sofort aktiv / bestätigt, keine Bestätigungsmail nötig)
         try:
-            supabase.auth.sign_up({"email": email, "password": password})
+            supabase.auth.admin.create_user({
+                "email": email, 
+                "password": password,
+                "email_confirm": True  # Verhindert, dass der User unbestätigt bleibt und der Login fehlschlägt!
+            })
         except Exception as e:
-            return False, f"Auth-Fehler: {str(e)}"
+            if "already registered" not in str(e).lower():
+                return False, f"Auth-Fehler: {str(e)}"
         
+        # 2. In 'benutzer'-Tabelle eintragen (upsert verhindert Duplikat-Crashs)
         try:
-            supabase.table("benutzer").insert({
+            supabase.table("benutzer").upsert({
                 "email": email,
                 "benutzername": str(member["mitgliedsnummer"])
-            }).execute()
+            }, on_conflict="email").execute()
         except Exception as e:
-            if "duplicate key" not in str(e).lower():
-                return False, f"Datenbank-Fehler beim User-Anlegen: {str(e)}"
+            return False, f"Datenbank-Fehler beim User-Anlegen: {str(e)}"
         
         return True, "Account erfolgreich aktiviert! Du kannst dich jetzt einloggen."
         
@@ -161,7 +165,6 @@ def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passw
         if (not res or not res.data) and identifier_str.isdigit():
             res = supabase.table("mitglieder").select("sicherheitsantwort, mitgliedsnummer, email").eq("mitgliedsnummer", int(identifier_str)).maybe_single().execute()
         if not res or not res.data:
-            # KORREKTUR: .not_("telefonnummer", "is", "null")
             res_tel = supabase.table("mitglieder").select("sicherheitsantwort, mitgliedsnummer, email, telefonnummer").not_("telefonnummer", "is", "null").execute()
             if res_tel and res_tel.data:
                 clean_input = "".join(filter(str.isdigit, identifier_str))
@@ -204,7 +207,7 @@ def passwort_zuruecksetzen(identifier):
 def update_user_role(mitgliedsnummer, neue_rolle):
     """Ändert die Rolle eines Mitglieds."""
     try:
-        res = supabase.table("mitglieder").update({
+        supabase.table("mitglieder").update({
             "rolle": neue_rolle
         }).eq("mitgliedsnummer", mitgliedsnummer).execute()
         return True, "Rolle erfolgreich aktualisiert."
