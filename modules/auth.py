@@ -106,11 +106,18 @@ def erstes_passwort_setzen(identifier, password):
             if "already" not in err_str.lower() and "registered" not in err_str.lower():
                 return False, f"Auth-Fehler: {err_str}"
         
+        # Sicherer Fallback statt upsert (verhindert Constraint-Fehler 42P10)
         try:
-            supabase.table("benutzer").upsert({
-                "email": email,
-                "benutzername": str(member["mitgliedsnummer"])
-            }, on_conflict="email").execute()
+            existing = supabase.table("benutzer").select("email").eq("email", email).maybe_single().execute()
+            if existing and existing.data:
+                supabase.table("benutzer").update({
+                    "benutzername": str(member["mitgliedsnummer"])
+                }).eq("email", email).execute()
+            else:
+                supabase.table("benutzer").insert({
+                    "email": email,
+                    "benutzername": str(member["mitgliedsnummer"])
+                }).execute()
         except Exception as db_err:
             return False, f"Datenbank-Fehler: {str(db_err)}"
         
@@ -143,12 +150,18 @@ def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passw
     email = res.data.get("email") if res.data.get("email") else f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
     
     try:
-        user = supabase.auth.admin.list_users()
-        target_user = [u for u in user.users if u.email == email]
+        # Kompatibler Abruf für neuere supabase-py Versionen
+        users_response = supabase.auth.admin.list_users()
+        user_list = users_response if isinstance(users_response, list) else getattr(users_response, "users", [])
+        
+        target_user = [u for u in user_list if getattr(u, "email", None) == email or (isinstance(u, dict) and u.get("email") == email)]
         if not target_user:
             return False, "Auth-Account nicht gefunden."
             
-        supabase.auth.admin.update_user_by_id(target_user[0].id, {"password": neues_passwort})
+        user_obj = target_user[0]
+        user_id = user_obj.id if hasattr(user_obj, "id") else user_obj.get("id")
+        
+        supabase.auth.admin.update_user_by_id(user_id, {"password": neues_passwort})
         return True, "Passwort wurde erfolgreich zurückgesetzt."
     except Exception as e:
         return False, f"Fehler: {str(e)}"
