@@ -1,4 +1,13 @@
+from supabase import create_client
 from database import supabase
+
+# --- ADMIN CLIENT SETUP ---
+# Trage hier deinen geheimen service_role-Key (Admin-Key) aus dem Supabase Dashboard ein!
+SUPABASE_URL = "https://ythubjdnercyeyfedsam.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0aHViamRuZXJjeWV5ZmVkc2FtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzUyODM1OCwiZXhwIjoyMDk5MTA0MzU4fQ.l5IzgnUsLOKwSM-sSk_fziY9U85f8Duc097puSSsleM"
+
+# Ein separater Admin-Client ausschließlich für Admin-Aufgaben (User anlegen/verwaltet)
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 def finde_email_zu_benutzer(identifier):
     if not identifier:
@@ -96,7 +105,8 @@ def erstes_passwort_setzen(identifier, password):
         email = member.get("email") if member.get("email") else f"{member['mitgliedsnummer']}@krayfueralle.intern"
         
         try:
-            supabase.auth.admin.create_user({
+            # Hier nutzen wir nun den Admin-Client mit dem service_role-Schlüssel!
+            supabase_admin.auth.admin.create_user({
                 "email": email, 
                 "password": password,
                 "email_confirm": True
@@ -143,12 +153,13 @@ def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passw
     email = res.data.get("email") if res.data.get("email") else f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
     
     try:
-        user = supabase.auth.admin.list_users()
+        # Auch hier für das Zurücksetzen den Admin-Client verwenden
+        user = supabase_admin.auth.admin.list_users()
         target_user = [u for u in user.users if u.email == email]
         if not target_user:
             return False, "Auth-Account nicht gefunden."
             
-        supabase.auth.admin.update_user_by_id(target_user[0].id, {"password": neues_passwort})
+        supabase_admin.auth.admin.update_user_by_id(target_user[0].id, {"password": neues_passwort})
         return True, "Passwort wurde erfolgreich zurückgesetzt."
     except Exception as e:
         return False, f"Fehler: {str(e)}"
