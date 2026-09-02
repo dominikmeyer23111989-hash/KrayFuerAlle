@@ -21,7 +21,7 @@ from modules import (
     changelog_page,
     chat_page,
     geburtstage_ehrungen_page,
-    spielplan_page  # <--- Hier angepasst
+    spielplan_page
 )
 import modules.mitglieder_page as mitglieder_page
 
@@ -96,24 +96,34 @@ if not st.session_state.logged_in:
             antwort = st.text_input("Antwort zur Sicherheitsfrage", key="reg_antwort")
             
             if st.button("Konto freischalten", use_container_width=True):
-                if all([ident, pw, frage, antwort]):
-                    erfolg, msg = erstes_passwort_setzen(ident, pw)
+                c_ident = ident.strip() if ident else ""
+                c_pw = pw.strip() if pw else ""
+                c_frage = frage.strip() if frage else ""
+                c_antwort = antwort.strip() if antwort else ""
+                
+                if not c_ident or not c_pw or not c_frage or not c_antwort:
+                    st.error("Bitte fülle alle Felder aus!")
+                else:
+                    erfolg, msg = erstes_passwort_setzen(c_ident, c_pw)
                     
                     if erfolg:
                         try:
-                            query = f"email.eq.{ident},telefonnummer.eq.{ident},mitgliedsnummer.eq.{ident}"
+                            if c_ident.isdigit():
+                                query = f"email.eq.{c_ident},telefonnummer.eq.{c_ident},mitgliedsnummer.eq.{int(c_ident)}"
+                            else:
+                                query = f"email.eq.{c_ident},telefonnummer.eq.{c_ident}"
+                                
                             supabase.table("mitglieder").update({
-                                "sicherheitsfrage": frage,
-                                "sicherheitsantwort": antwort
+                                "sicherheitsfrage": c_frage,
+                                "sicherheitsantwort": c_antwort
                             }).or_(query).execute()
                             
                             st.success(msg)
+                            st.info("Du kannst dich jetzt im Tab 'Anmelden' einloggen.")
                         except Exception as e:
-                            st.warning(f"Konto aktiviert, aber Sicherheitsfrage konnte nicht gespeichert werden: {e}")
+                            st.warning(f"Konto in Auth aktiviert, aber Sicherheitsfrage konnte nicht gespeichert werden: {e}")
                     else:
                         st.error(msg)
-                else:
-                    st.error("Bitte fülle alle Felder aus!")
 
         # --- TAB 3: PASSWORT VERGESSEN ---
         with tab_passwort:
@@ -197,7 +207,7 @@ else:
         "Mitgliedsausweis", 
         "💬 Vereins-Chat",
         "🎂 Geburtstage & Ehrungen",
-        "🎮 Spiele",  # Hier eingefügt
+        "🎮 Spiele", 
         "Inventar & Ausleihe", 
         "Events & Schichten", 
         "Kalender & Termine",
@@ -220,7 +230,6 @@ else:
     
     st.sidebar.divider()
     
-    # --- ADMIN TICKER BEREICH IN DER SIDEBAR ---
     ticker_component.admin_ticker_bereich()
     
     if st.sidebar.button("🚗 Abmelden", use_container_width=True):
@@ -242,7 +251,7 @@ else:
     elif menue == "🎂 Geburtstage & Ehrungen":
         geburtstage_ehrungen_page.show()
     elif menue == "🎮 Spiele":
-        spielplan_page.show()  # Logik für die neue Seite aufrufen
+        spielplan_page.show()
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
     elif menue == "Events & Schichten":
@@ -264,5 +273,4 @@ else:
     elif menue == "💡 Feedback & Wünsche":
         feedback_page.show()
 
-    # --- TICKER AM SEITENENDE ANZEIGEN ---
     ticker_component.zeige_ticker()
