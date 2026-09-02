@@ -1,13 +1,21 @@
 from supabase import create_client
+from supabase.lib.client_options import ClientOptions
 from database import supabase
 
 # --- ADMIN CLIENT SETUP ---
-# Trage hier deinen geheimen service_role-Key (Admin-Key) aus dem Supabase Dashboard ein!
 SUPABASE_URL = "https://ythubjdnercyeyfedsam.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0aHViamRuZXJjeWV5ZmVkc2FtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzUyODM1OCwiZXhwIjoyMDk5MTA0MzU4fQ.l5IzgnUsLOKwSM-sSk_fziY9U85f8Duc097puSSsleM"
 
-# Ein separater Admin-Client ausschließlich für Admin-Aufgaben (User anlegen/verwaltet)
-supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+# WICHTIG: Die ClientOptions verhindern Session-Persistenz und Token-Refresh für den Admin-Client,
+# damit die Admin-Endpunkte (create_user, update_user_by_id) fehlerfrei greifen.
+supabase_admin = create_client(
+    SUPABASE_URL, 
+    SUPABASE_SERVICE_ROLE_KEY,
+    options=ClientOptions(
+        auto_refresh_token=False,
+        persist_session=False,
+    )
+)
 
 def finde_email_zu_benutzer(identifier):
     if not identifier:
@@ -105,7 +113,6 @@ def erstes_passwort_setzen(identifier, password):
         email = member.get("email") if member.get("email") else f"{member['mitgliedsnummer']}@krayfueralle.intern"
         
         try:
-            # Hier nutzen wir nun den Admin-Client mit dem service_role-Schlüssel!
             supabase_admin.auth.admin.create_user({
                 "email": email, 
                 "password": password,
@@ -153,7 +160,6 @@ def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passw
     email = res.data.get("email") if res.data.get("email") else f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
     
     try:
-        # Auch hier für das Zurücksetzen den Admin-Client verwenden
         user = supabase_admin.auth.admin.list_users()
         target_user = [u for u in user.users if u.email == email]
         if not target_user:
