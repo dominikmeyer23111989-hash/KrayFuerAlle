@@ -1,17 +1,4 @@
-import streamlit as st
-import requests
-from supabase import create_client
 from database import supabase
-
-# --- ADMIN CLIENT SETUP ---
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_KEY"]
-
-# WICHTIG: Keine Optionen mehr übergeben! Das behebt den Absturz.
-supabase_admin = create_client(
-    SUPABASE_URL, 
-    SUPABASE_SERVICE_ROLE_KEY
-)
 
 def finde_email_zu_benutzer(identifier):
     if not identifier:
@@ -108,25 +95,16 @@ def erstes_passwort_setzen(identifier, password):
         member = res.data
         email = member.get("email") if member.get("email") else f"{member['mitgliedsnummer']}@krayfueralle.intern"
         
-        # Direkter REST-Aufruf zur Umgehung des supabase-py Client-Bugs
-        url = f"{SUPABASE_URL}/auth/v1/admin/users"
-        headers = {
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "email": email, 
-            "password": password,
-            "email_confirm": True
-        }
-        
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code not in [200, 201]:
-            err_data = response.json()
-            err_msg = err_data.get("msg") or err_data.get("message") or response.text
-            if "already registered" not in err_msg.lower():
-                return False, f"Auth-Fehler: {err_msg}"
+        try:
+            supabase.auth.admin.create_user({
+                "email": email, 
+                "password": password,
+                "email_confirm": True
+            })
+        except Exception as auth_err:
+            err_str = str(auth_err)
+            if "already" not in err_str.lower() and "registered" not in err_str.lower():
+                return False, f"Auth-Fehler: {err_str}"
         
         try:
             supabase.table("benutzer").upsert({
@@ -165,12 +143,12 @@ def passwort_zuruecksetzen_mit_sicherheitsfrage(identifier, antwort, neues_passw
     email = res.data.get("email") if res.data.get("email") else f"{res.data['mitgliedsnummer']}@krayfueralle.intern"
     
     try:
-        user = supabase_admin.auth.admin.list_users()
+        user = supabase.auth.admin.list_users()
         target_user = [u for u in user.users if u.email == email]
         if not target_user:
             return False, "Auth-Account nicht gefunden."
             
-        supabase_admin.auth.admin.update_user_by_id(target_user[0].id, {"password": neues_passwort})
+        supabase.auth.admin.update_user_by_id(target_user[0].id, {"password": neues_passwort})
         return True, "Passwort wurde erfolgreich zurückgesetzt."
     except Exception as e:
         return False, f"Fehler: {str(e)}"
