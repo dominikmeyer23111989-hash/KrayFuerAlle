@@ -103,7 +103,7 @@ def erstes_passwort_setzen(identifier, password):
             })
         except Exception as auth_err:
             err_str = str(auth_err)
-            if "already registered" not in err_str.lower():
+            if "already" not in err_str.lower() and "registered" not in err_str.lower():
                 return False, f"Auth-Fehler: {err_str}"
         
         try:
