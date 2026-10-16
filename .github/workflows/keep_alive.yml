@@ -3,7 +3,7 @@ name: App Keep-Alive
 on:
   # Läuft alle 3 Tage um 00:00 Uhr (schützt vor dem Inaktivitäts-Schlaf)
   schedule:
-    - cron: '0 0 */3 * *'
+    - cron: '0 0 */1 * *'
   # Ermöglicht auch das manuelle Starten über den GitHub-Tab "Actions"
   workflow_dispatch:
 
