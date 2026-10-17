@@ -2,7 +2,8 @@ name: App Keep-Alive
 
 on:
   schedule:
-    - cron: '0 0 */1 * *'
+    # Läuft alle 3 Tage um 00:00 Uhr
+    - cron: '0 0 */3 * *'
   workflow_dispatch:
 
 jobs:
@@ -11,4 +12,5 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          curl -I https://krayfueralle.streamlit.app
+          # -L folgt dem Redirect, -s unterdrückt das Textgeplänkel, -o /dev/null verwirft den HTML-Inhalt
+          curl -s -L -o /dev/null https://krayfueralle.streamlit.app
