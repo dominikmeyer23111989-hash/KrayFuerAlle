@@ -12,5 +12,6 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          # -L folgt dem Redirect, -s unterdrückt das Textgeplänkel, -o /dev/null verwirft den HTML-Inhalt
-          curl -s -L -o /dev/null https://krayfueralle.streamlit.app
+          # --max-redirs 2 bricht die Weiterleitung nach maximal 2 Schritten ab, 
+          # wodurch die App aus dem Schlaf geholt wird, ohne in die Endlosschleife zu geraten.
+          curl -s -L --max-redirs 2 -o /dev/null https://krayfueralle.streamlit.app || true
