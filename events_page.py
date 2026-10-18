@@ -100,7 +100,7 @@ def get_wetter_fuer_ort_und_datum(ort, datum_str):
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={requests.utils.quote(str(ort))}&count=1&language=de&format=json"
         geo_res = requests.get(geo_url, timeout=3).json()
         if not geo_res.get("results"):
-            lat, lon = 51.4818, 7.2162  # Fallback Bochum
+            lat, lon = 51.4818, 7.2162
         else:
             lat = geo_res["results"][0]["lat"]
             lon = geo_res["results"][0]["lon"]
