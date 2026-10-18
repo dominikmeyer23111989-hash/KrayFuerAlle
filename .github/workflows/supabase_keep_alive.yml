@@ -2,16 +2,23 @@ name: Supabase Keep-Alive
 
 on:
   schedule:
-    # Läuft alle 5 Tage um 03:00 Uhr
-    - cron: '0 0 */3 * *'
+    - cron: '0 0 */5 * *'
   workflow_dispatch:
 
 jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Send API Request to Supabase
+      - name: Check and Ping Supabase
+        env:
+          SB_URL: ${{ secrets.SUPABASE_URL }}
+          SB_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          curl -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/mitglieder?select=count" \
-          -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"
+          if [ -z "$SB_URL" ]; then
+            echo "Fehler: SUPABASE_URL Secret ist leer oder nicht gefunden!"
+            exit 1
+          fi
+          
+          curl -X GET "$SB_URL/rest/v1/mitglieder?select=count" \
+          -H "apikey: $SB_KEY" \
+          -H "Authorization: Bearer $SB_KEY"
