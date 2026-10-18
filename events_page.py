@@ -26,7 +26,9 @@ from modules.events import (
 )
 from modules.inventar import get_alle_inventar, formatiere_datum_fuer_anzeige
 from database import supabase
-
+def show():
+    st.error("🚨 DIE NEUE EVENTS_PAGE.PY WIRD GELADEN! 🚨")
+    st.header("📅 Event- & Veranstaltungsverwaltung")
 def safe_val(d, key, fallback=""):
     """Sicherer Dictionary-Lookup, der auch None-Werte zuverlässig abfängt."""
     if not d or key not in d or d[key] is None:
