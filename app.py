@@ -1,4 +1,5 @@
 import streamlit as st
+import importlib
 from database import supabase
 from modules.auth import (
     login_user, 
@@ -86,21 +87,19 @@ if not st.session_state.logged_in:
                         st.error(result["message"])
                 else:
                     st.warning("Bitte Benutzernamen und Passwort eingeben.")
-# --- TAB 2: KONTO AKTIVIEREN ---
+
+        # --- TAB 2: KONTO AKTIVIEREN ---
         with tab_aktivieren:
             st.markdown("### Account aktivieren")
             
-            # WICHTIG: Wir packen alles in ein Formular
             with st.form("aktivierung_form"):
                 ident = st.text_input("Mitglieds-Nr, E-Mail oder Tel", key="reg_ident")
                 pw = st.text_input("Neues Passwort", type="password", key="reg_pw")
                 frage = st.text_input("Sicherheitsfrage (z.B. Name des ersten Haustiers?)", key="reg_frage")
                 antwort = st.text_input("Antwort zur Sicherheitsfrage", key="reg_antwort")
                 
-                # Der Button wird zum form_submit_button!
                 submitted = st.form_submit_button("Konto freischalten", use_container_width=True)
                 
-            # Diese Logik wird ERST ausgeführt, wenn der Button im Formular geklickt wurde
             if submitted:
                 c_ident = ident.strip() if ident else ""
                 c_pw = pw.strip() if pw else ""
@@ -216,6 +215,7 @@ else:
         "🎮 Spiele", 
         "Inventar & Ausleihe", 
         "Events & Schichten", 
+        "🌐 Web-Buchungen",
         "Kalender & Termine",
         "Aufgaben & To-Dos",
         "Dokumente",
@@ -261,6 +261,10 @@ else:
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
     elif menue == "Events & Schichten":
+        importlib.reload(events_page)
+        events_page.show()
+    elif menue == "🌐 Web-Buchungen":
+        importlib.reload(events_page)
         events_page.show()
     elif menue == "Kalender & Termine":
         termine_page.show()
