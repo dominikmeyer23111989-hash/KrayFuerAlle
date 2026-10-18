@@ -215,7 +215,6 @@ else:
         "🎮 Spiele", 
         "Inventar & Ausleihe", 
         "Events & Schichten", 
-        "🌐 Web-Buchungen",
         "Kalender & Termine",
         "Aufgaben & To-Dos",
         "Dokumente",
@@ -261,9 +260,6 @@ else:
     elif menue == "Inventar & Ausleihe":
         inventar_page.show()
     elif menue == "Events & Schichten":
-        importlib.reload(events_page)
-        events_page.show()
-    elif menue == "🌐 Web-Buchungen":
         importlib.reload(events_page)
         events_page.show()
     elif menue == "Kalender & Termine":
