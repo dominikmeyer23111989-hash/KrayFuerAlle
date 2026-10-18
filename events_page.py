@@ -26,10 +26,7 @@ from modules.events import (
 )
 from modules.inventar import get_alle_inventar, formatiere_datum_fuer_anzeige
 from database import supabase
-def show():
-    import inspect
-    st.error(f"Eingelesene Tabs: {inspect.getsource(show)}")
-    st.header("📅 Event- & Veranstaltungsverwaltung")
+
 def safe_val(d, key, fallback=""):
     """Sicherer Dictionary-Lookup, der auch None-Werte zuverlässig abfängt."""
     if not d or key not in d or d[key] is None:
