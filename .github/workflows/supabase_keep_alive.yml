@@ -9,16 +9,18 @@ jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Check and Ping Supabase
+      - name: Debug and Ping Supabase
         env:
           SB_URL: ${{ secrets.SUPABASE_URL }}
           SB_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
+          echo "Prüfe übergebene URL: '${SB_URL}'"
+          
           if [ -z "$SB_URL" ]; then
-            echo "Fehler: SUPABASE_URL Secret ist leer oder nicht gefunden!"
+            echo "FEHLER: Das Secret SUPABASE_URL ist leer oder existiert nicht in den GitHub Repository Secrets!"
             exit 1
           fi
           
-          curl -X GET "$SB_URL/rest/v1/mitglieder?select=count" \
+          curl -v -X GET "$SB_URL/rest/v1/mitglieder?select=count" \
           -H "apikey: $SB_KEY" \
           -H "Authorization: Bearer $SB_KEY"
