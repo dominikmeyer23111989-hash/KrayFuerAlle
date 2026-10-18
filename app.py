@@ -25,8 +25,7 @@ from modules import (
     spielplan_page
 )
 import modules.mitglieder_page as mitglieder_page
-import streamlit as st
-st.error("🚨🚨🚨 ACHTUNG: ICH BIN DIE GANZ NEUE APP.PY AUF DEM SERVER! 🚨🚨🚨")
+
 
 # Muss der allererste Streamlit-Befehl sein
 st.set_page_config(page_title="KrayFürAlle e.V. - Verwaltung", page_icon="🏢", layout="wide")
