@@ -261,7 +261,6 @@ else:
         inventar_page.show()
     elif menue == "Events & Schichten":
         importlib.reload(events_page)
-        st.write("📂 **Aktiver Dateipfad von events_page:**", events_page.__file__)
         events_page.show()
     elif menue == "Kalender & Termine":
         termine_page.show()
