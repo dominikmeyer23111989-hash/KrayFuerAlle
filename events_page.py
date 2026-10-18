@@ -279,7 +279,7 @@ def show():
     is_admin_or_vorstand = st.session_state.get("user_rolle", "").lower() in ["admin", "administrator", "vorstand", "kassenwart"]
     aktuelles_mitglied_id = st.session_state.get("user_id")
     
-    # 6 Tabs sauber definiert
+    # Exakt 6 Tabs definiert
     tab_web_buchungen, tab_uebersicht, tab_erstellung, tab_schichten, tab_material, tab_freigaben = st.tabs([
         "🌐 Web-Buchungen",
         "📋 Event-Übersicht & RSVP",
