@@ -279,12 +279,14 @@ def show():
     is_admin_or_vorstand = st.session_state.get("user_rolle", "").lower() in ["admin", "administrator", "vorstand", "kassenwart"]
     aktuelles_mitglied_id = st.session_state.get("user_id")
     
-    tab_uebersicht, tab_erstellung, tab_schichten, tab_material, tab_freigaben = st.tabs([
+    # 6 Tabs definiert
+    tab_uebersicht, tab_erstellung, tab_schichten, tab_material, tab_freigaben, tab_web_buchungen = st.tabs([
         "📋 Event-Übersicht & RSVP",
         "➕ Event anlegen & bearbeiten",
         "👥 Schichtplaner",
         "📦 Material & Ausstattung",
-        "🔒 Event-Freigaben"
+        "🔒 Event-Freigaben",
+        "🌐 Web-Buchungen"
     ])
 
     events = get_alle_events()
@@ -637,70 +639,70 @@ def show():
         st.subheader("🔒 Freigaben & Dokumente")
         st.info("Hier verwaltest du behördliche Freigaben, Schanklizenzen oder Nutzungsvereinbarungen.")
 
-# ==========================================
-# 6. SEPARATE FUNKTION FÜR WEB-BUCHUNGEN
-# ==========================================
-def show_web_buchungen():
-    st.header("🌐 Online-Buchungen (kray-für-alle.de)")
-    st.caption("Verwalte hier alle Anfragen, die von Bürgern über das Formular auf eurer Homepage eingereicht wurden.")
+    # ==========================================
+    # 6. WEB-BUCHUNGEN (kray-für-alle.de)
+    # ==========================================
+    with tab_web_buchungen:
+        st.subheader("🌐 Eingehende Online-Buchungen (kray-für-alle.de)")
+        st.caption("Verwalte hier alle Anfragen, die von Bürgern über das Formular auf eurer Homepage eingereicht wurden.")
 
-    try:
-        res = supabase.table("event_bookings").select("*").order("created_at", desc=True).execute()
-        web_bookings = res.data if res.data else []
+        try:
+            res = supabase.table("event_bookings").select("*").order("created_at", desc=True).execute()
+            web_bookings = res.data if res.data else []
 
-        if not web_bookings:
-            st.info("Aktuell liegen keine Online-Buchungsanfragen vor.")
-        else:
-            df_wb = pd.DataFrame(web_bookings)
+            if not web_bookings:
+                st.info("Aktuell liegen keine Online-Buchungsanfragen vor.")
+            else:
+                df_wb = pd.DataFrame(web_bookings)
 
-            c_f1, c_f2 = st.columns(2)
-            with c_f1:
-                ev_filter = st.selectbox("Nach Veranstaltung filtern:", ["Alle"] + list(df_wb["event_name"].unique()), key="wb_ev_filter")
-            with c_f2:
-                st_filter = st.selectbox("Nach Status filtern:", ["Alle", "pending", "confirmed", "cancelled"], key="wb_st_filter")
+                c_f1, c_f2 = st.columns(2)
+                with c_f1:
+                    ev_filter = st.selectbox("Nach Veranstaltung filtern:", ["Alle"] + list(df_wb["event_name"].unique()), key="wb_ev_filter")
+                with c_f2:
+                    st_filter = st.selectbox("Nach Status filtern:", ["Alle", "pending", "confirmed", "cancelled"], key="wb_st_filter")
 
-            if ev_filter != "Alle":
-                df_wb = df_wb[df_wb["event_name"] == ev_filter]
-            if st_filter != "Alle":
-                df_wb = df_wb[df_wb["status"] == st_filter]
+                if ev_filter != "Alle":
+                    df_wb = df_wb[df_wb["event_name"] == ev_filter]
+                if st_filter != "Alle":
+                    df_wb = df_wb[df_wb["status"] == st_filter]
 
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Anfragen gesamt", len(df_wb))
-            m2.metric("Offen (pending)", len(df_wb[df_wb["status"] == "pending"]))
-            m3.metric("Bestätigt", len(df_wb[df_wb["status"] == "confirmed"]))
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Anfragen gesamt", len(df_wb))
+                m2.metric("Offen (pending)", len(df_wb[df_wb["status"] == "pending"]))
+                m3.metric("Bestätigt", len(df_wb[df_wb["status"] == "confirmed"]))
 
-            st.divider()
+                st.divider()
 
-            for row in df_wb.to_dict(orient="records"):
-                status = row.get("status", "pending")
-                icon = "⏳" if status == "pending" else "✅" if status == "confirmed" else "❌"
-                
-                with st.expander(f"{icon} {row['applicant_name']} – {row['event_name']} ({row['count']} Personen)"):
-                    col1, col2 = st.columns([2, 1])
+                for row in df_wb.to_dict(orient="records"):
+                    status = row.get("status", "pending")
+                    icon = "⏳" if status == "pending" else "✅" if status == "confirmed" else "❌"
                     
-                    with col1:
-                        st.write(f"**E-Mail:** {row['email']}")
-                        st.write(f"**Anzahl Personen:** {row['count']}")
-                        st.write(f"**Anmerkung:** {row.get('notes') or 'Keine'}")
-                        st.write(f"**Eingegangen am:** {row.get('created_at', '')}")
-                        st.write(f"**Status:** `{status}`")
+                    with st.expander(f"{icon} {row['applicant_name']} – {row['event_name']} ({row['count']} Personen)"):
+                        col1, col2 = st.columns([2, 1])
+                        
+                        with col1:
+                            st.write(f"**E-Mail:** {row['email']}")
+                            st.write(f"**Anzahl Personen:** {row['count']}")
+                            st.write(f"**Anmerkung:** {row.get('notes') or 'Keine'}")
+                            st.write(f"**Eingegangen am:** {row.get('created_at', '')}")
+                            st.write(f"**Status:** `{status}`")
 
-                    with col2:
-                        st.write("**Aktion wählen:**")
-                        if st.button("✅ Bestätigen", key=f"wb_conf_{row['id']}"):
-                            supabase.table("event_bookings").update({"status": "confirmed"}).eq("id", row["id"]).execute()
-                            st.success("Anfrage bestätigt!")
-                            st.rerun()
+                        with col2:
+                            st.write("**Aktion wählen:**")
+                            if st.button("✅ Bestätigen", key=f"wb_conf_{row['id']}"):
+                                supabase.table("event_bookings").update({"status": "confirmed"}).eq("id", row["id"]).execute()
+                                st.success("Anfrage bestätigt!")
+                                st.rerun()
 
-                        if st.button("❌ Stornieren", key=f"wb_canc_{row['id']}"):
-                            supabase.table("event_bookings").update({"status": "cancelled"}).eq("id", row["id"]).execute()
-                            st.warning("Anfrage storniert!")
-                            st.rerun()
+                            if st.button("❌ Stornieren", key=f"wb_canc_{row['id']}"):
+                                supabase.table("event_bookings").update({"status": "cancelled"}).eq("id", row["id"]).execute()
+                                st.warning("Anfrage storniert!")
+                                st.rerun()
 
-                        if st.button("🗑️ Löschen", key=f"wb_del_{row['id']}"):
-                            supabase.table("event_bookings").delete().eq("id", row["id"]).execute()
-                            st.error("Anfrage gelöscht!")
-                            st.rerun()
+                            if st.button("🗑️ Löschen", key=f"wb_del_{row['id']}"):
+                                supabase.table("event_bookings").delete().eq("id", row["id"]).execute()
+                                st.error("Anfrage gelöscht!")
+                                st.rerun()
 
-    except Exception as e:
-        st.error(f"Fehler beim Laden der Web-Buchungen: {e}")
+        except Exception as e:
+            st.error(f"Fehler beim Laden der Web-Buchungen: {e}")
