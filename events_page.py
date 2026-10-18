@@ -26,6 +26,9 @@ from modules.events import (
 )
 from modules.inventar import get_alle_inventar, formatiere_datum_fuer_anzeige
 from database import supabase
+def show():
+    st.error("🚨 TEST-MARKER: WENN DU DAS SIEHST, LÄDT DER SERVER DIE NEUE DATEI! 🚨")
+    st.header("📅 Event- & Veranstaltungsverwaltung")
 
 def safe_val(d, key, fallback=""):
     """Sicherer Dictionary-Lookup, der auch None-Werte zuverlässig abfängt."""
