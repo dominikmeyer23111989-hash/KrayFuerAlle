@@ -72,8 +72,10 @@ if not st.session_state.logged_in:
                             st.session_state.user_id = user_data.get("id")
                             st.session_state.vorname = user_data.get("vorname", "Mitglied")
                             
+                            # NEU: Robuste Rollen-Zuweisung beim Login
                             rohes_feld = user_data.get("rolle", "mitglied")
-                            st.session_state.user_rolle = str(rohes_feld).strip().lower()
+                            rolle_clean = str(rohes_feld).strip().lower()
+                            st.session_state.user_rolle = rolle_clean
                             
                             st.session_state.hat_inventar_rechte = user_data.get("hat_inventar_rechte", False)
                             st.session_state.hat_adressbuch_rechte = user_data.get("hat_adressbuch_rechte", False)
