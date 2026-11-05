@@ -9,7 +9,11 @@ import io
 def show():
     str_alias.header("👥 Mitglieder-, Rollen- & Abwesenheitsverwaltung")
     
-    is_admin_or_vorstand = str_alias.session_state.get("user_rolle", "").lower() in ["admin", "administrator", "vorstand"]
+    # Robuste Rollenprüfung (Groß-/Kleinschreibung & Leerzeichen bereinigen)
+    aktuelle_rolle = str(str_alias.session_state.get("user_rolle", "")).strip().lower()
+    admin_rollen = ["admin", "administrator", "vorstand", "vorstandsmitglied", "kassenwart"]
+    is_admin_or_vorstand = any(r in aktuelle_rolle for r in admin_rollen)
+    
     current_user_id = str_alias.session_state.get("user_id")
     
     # Tabs dynamisch je nach Rolle anpassen (inkl. Archiv und Abwesenheiten)
@@ -101,7 +105,6 @@ def show():
         str_alias.subheader("Übersicht aller aktiven Vereinsmitglieder")
         try:
             sichere_spalten = "id, mitgliedsnummer, vorname, nachname, geburtsdatum, geschlecht, email, telefonnummer, strasse, plz, ort, beitrittsdatum, rolle, status, ist_gesperrt, hat_inventar_rechte"
-            # Nur aktive Mitglieder laden (Standard: status = 'aktiv')
             res = supabase.table("mitglieder").select(sichere_spalten).eq("status", "aktiv").execute()
             mitglieder = res.data if res.data else []
             
@@ -393,7 +396,6 @@ def show():
         with tab_statistik:
             str_alias.subheader("📊 Mitglieder-Auswertung & Berichte")
             try:
-                # Statistiken basieren auf allen aktiven Mitgliedern
                 daten = supabase.table("mitglieder").select("*").eq("status", "aktiv").execute().data or []
                 if daten:
                     df = pd.DataFrame(daten)
