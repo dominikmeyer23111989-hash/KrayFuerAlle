@@ -9,15 +9,20 @@ import io
 def show():
     str_alias.header("👥 Mitglieder-, Rollen- & Abwesenheitsverwaltung")
     
-    is_admin_or_vorstand = str_alias.session_state.get("user_rolle", "").lower() in ["admin", "administrator", "vorstand"]
+    # Robuste Rollenprüfung (Groß-/Kleinschreibung & Leerzeichen bereinigen)
+    aktuelle_rolle = str(str_alias.session_state.get("user_rolle", "")).strip().lower()
+    admin_rollen = ["admin", "administrator", "vorstand", "vorstandsmitglied", "kassenwart"]
+    is_admin_or_vorstand = any(r in aktuelle_rolle for r in admin_rollen)
+    
     current_user_id = str_alias.session_state.get("user_id")
     
-    # Tabs dynamisch je nach Rolle anpassen (inkl. Abwesenheiten)
+    # Tabs dynamisch je nach Rolle anpassen (inkl. Archiv und Abwesenheiten)
     if is_admin_or_vorstand:
-        tab_liste, tab_neu, tab_bearbeiten, tab_statistik, tab_abw = str_alias.tabs([
-            "📋 Mitgliederliste", 
+        tab_liste, tab_archiv, tab_neu, tab_bearbeiten, tab_statistik, tab_abw = str_alias.tabs([
+            "📋 Aktive Mitglieder", 
+            "📦 Archiv / Ausgetreten",
             "➕ Neues Mitglied", 
-            "⚙️ Bearbeiten & Löschen",
+            "⚙️ Bearbeiten & Austritt",
             "📊 Auswertung & PDF",
             "📅 Abwesenheiten"
         ])
@@ -27,6 +32,7 @@ def show():
             "👤 Mein Profil bearbeiten",
             "📅 Abwesenheiten"
         ])
+        tab_archiv = None
         tab_neu = None
         tab_statistik = None
     
@@ -93,13 +99,13 @@ def show():
             return "Über 65 Jahre"
 
     # ==========================================
-    # 1. MITGLIEDERLISTE
+    # 1. MITGLIEDERLISTE (Aktive)
     # ==========================================
     with tab_liste:
-        str_alias.subheader("Übersicht aller Vereinsmitglieder")
+        str_alias.subheader("Übersicht aller aktiven Vereinsmitglieder")
         try:
             sichere_spalten = "id, mitgliedsnummer, vorname, nachname, geburtsdatum, geschlecht, email, telefonnummer, strasse, plz, ort, beitrittsdatum, rolle, status, ist_gesperrt, hat_inventar_rechte"
-            res = supabase.table("mitglieder").select(sichere_spalten).execute()
+            res = supabase.table("mitglieder").select(sichere_spalten).eq("status", "aktiv").execute()
             mitglieder = res.data if res.data else []
             
             if mitglieder:
@@ -113,7 +119,7 @@ def show():
                             except Exception:
                                 pass
 
-                str_alias.metric("Gesamtmitglieder", len(mitglieder))
+                str_alias.metric("Aktive Mitglieder", len(mitglieder))
                 str_alias.dataframe(
                     mitglieder, 
                     use_container_width=True,
@@ -135,9 +141,48 @@ def show():
                     hide_index=True
                 )
             else:
-                str_alias.info("Keine Mitglieder in der Datenbank gefunden.")
+                str_alias.info("Keine aktiven Mitglieder in der Datenbank gefunden.")
         except Exception as e:
             str_alias.error(f"Fehler beim Laden der Mitgliederliste: {e}")
+
+    # ==========================================
+    # 1.1 ARCHIV / AUSGETRETENE MITGLIEDER (Nur Admin/Vorstand)
+    # ==========================================
+    if is_admin_or_vorstand and tab_archiv is not None:
+        with tab_archiv:
+            str_alias.subheader("📦 Archiv & Ausgetretene Mitglieder")
+            str_alias.markdown("Hier findest du ehemalige Mitglieder. Du kannst sie bei einem Wiedereintritt mit einem Klick reaktivieren.")
+            try:
+                res_archiv = supabase.table("mitglieder").select("*").eq("status", "ausgetreten").execute()
+                archiv_liste = res_archiv.data if res_archiv.data else []
+
+                if archiv_liste:
+                    str_alias.metric("Archivierte Mitglieder", len(archiv_liste))
+                    
+                    for am in archiv_liste:
+                        with str_alias.expander(f"{am.get('nachname')}, {am.get('vorname')} (Nr. {am.get('mitgliedsnummer', '---')})"):
+                            col_a1, col_a2 = str_alias.columns([2, 1])
+                            with col_a1:
+                                str_alias.write(f"**E-Mail:** {am.get('email', 'Keine Angabe')}")
+                                str_alias.write(f"**Austrittsdatum:** {am.get('austritts_datum', 'Nicht angegeben')}")
+                                str_alias.write(f"**Austrittsgrund:** {am.get('austritts_grund', 'Kein Grund hinterlegt')}")
+                            with col_a2:
+                                if str_alias.button("🔄 Mitglied reaktivieren", key=f"reaktivieren_{am['id']}"):
+                                    try:
+                                        supabase.table("mitglieder").update({
+                                            "status": "aktiv",
+                                            "austritts_datum": None,
+                                            "austritts_grund": None,
+                                            "archiviert_am": None
+                                        }).eq("id", am['id']).execute()
+                                        str_alias.success(f"{am.get('vorname')} {am.get('nachname')} wurde erfolgreich reaktiviert!")
+                                        str_alias.rerun()
+                                    except Exception as err:
+                                        str_alias.error(f"Fehler beim Reaktivieren: {err}")
+                else:
+                    str_alias.info("Das Archiv ist leer. Es sind keine ausgetretenen Mitglieder vorhanden.")
+            except Exception as e:
+                str_alias.error(f"Fehler beim Laden des Archivs: {e}")
 
     # ==========================================
     # 2. NEUES MITGLIED ANLEGEN (Nur Admin/Vorstand)
@@ -211,9 +256,9 @@ def show():
     # ==========================================
     with tab_bearbeiten:
         if is_admin_or_vorstand:
-            str_alias.subheader("Mitglied bearbeiten oder löschen (Admin-Ansicht)")
+            str_alias.subheader("Mitglied bearbeiten oder archivieren (Admin-Ansicht)")
             try:
-                res = supabase.table("mitglieder").select("id, mitgliedsnummer, vorname, nachname").execute()
+                res = supabase.table("mitglieder").select("id, mitgliedsnummer, vorname, nachname").eq("status", "aktiv").execute()
                 mitglieder_liste = res.data if res.data else []
                 
                 if mitglieder_liste:
@@ -261,13 +306,17 @@ def show():
                                     
                                     e_gesperrt = str_alias.checkbox("Mitglied gesperrt", value=m_data.get("ist_gesperrt", False))
                                     e_inventar = str_alias.checkbox("Inventar-Rechte", value=m_data.get("hat_inventar_rechte", False))
-                                    
+                                
+                                str_alias.divider()
+                                str_alias.markdown("### Austritt / Archivierung")
+                                austritts_grund_input = str_alias.text_input("Austrittsgrund (optional beim Archivieren)", placeholder="z.B. Wohnortwechsel, Kündigung...")
+
                                 col_save, col_del = str_alias.columns(2)
                                 with col_save:
                                     save_btn = str_alias.form_submit_button("Änderungen speichern", type="primary")
                                 with col_del:
-                                    delete_btn = str_alias.form_submit_button("Mitglied löschen", type="secondary")
-                                    
+                                    archive_btn = str_alias.form_submit_button("Mitglied archivieren (Austritt)", type="secondary")
+                                
                                 if save_btn:
                                     update_daten = {
                                         "mitgliedsnummer": e_mitgliedsnummer, "vorname": e_vorname, "nachname": e_nachname,
@@ -284,15 +333,22 @@ def show():
                                     except Exception as e:
                                         str_alias.error(f"Fehler: {e}")
                                         
-                                if delete_btn:
+                                if archive_btn:
                                     try:
-                                        supabase.table("mitglieder").delete().eq("id", selected_id).execute()
-                                        str_alias.success("Mitglied gelöscht.")
+                                        heute = datetime.now().strftime("%Y-%m-%d")
+                                        archive_daten = {
+                                            "status": "ausgetreten",
+                                            "austritts_datum": heute,
+                                            "austritts_grund": austritts_grund_input or "Kein Grund angegeben",
+                                            "archiviert_am": datetime.now().isoformat()
+                                        }
+                                        supabase.table("mitglieder").update(archive_daten).eq("id", selected_id).execute()
+                                        str_alias.success("Mitglied wurde ins Archiv verschoben (ausgetreten).")
                                         str_alias.rerun()
                                     except Exception as e:
-                                        str_alias.error(f"Fehler: {e}")
+                                        str_alias.error(f"Fehler beim Archivieren: {e}")
                 else:
-                    str_alias.info("Keine Mitglieder vorhanden.")
+                    str_alias.info("Keine aktiven Mitglieder vorhanden.")
             except Exception as e:
                 str_alias.error(f"Fehler beim Laden: {e}")
         else:
@@ -340,7 +396,7 @@ def show():
         with tab_statistik:
             str_alias.subheader("📊 Mitglieder-Auswertung & Berichte")
             try:
-                daten = supabase.table("mitglieder").select("*").execute().data or []
+                daten = supabase.table("mitglieder").select("*").eq("status", "aktiv").execute().data or []
                 if daten:
                     df = pd.DataFrame(daten)
                     df["alter"] = df["geburtsdatum"].apply(berechne_alter)
@@ -377,7 +433,7 @@ def show():
                     class PDF(FPDF):
                         def header(self):
                             self.set_font('helvetica', 'B', 15)
-                            self.cell(0, 10, 'Mitgliederbericht', 0, 1, 'C')
+                            self.cell(0, 10, 'Mitgliederbericht (Aktive)', 0, 1, 'C')
                         def footer(self):
                             self.set_y(-15)
                             self.set_font('helvetica', 'I', 8)
@@ -387,7 +443,7 @@ def show():
                         pdf = PDF()
                         pdf.add_page()
                         pdf.set_font('helvetica', 'B', 12)
-                        pdf.cell(0, 10, f'Gesamtanzahl Mitglieder: {len(df)}', 0, 1)
+                        pdf.cell(0, 10, f'Gesamtanzahl aktive Mitglieder: {len(df)}', 0, 1)
                         pdf.ln(5)
                         pdf.cell(0, 10, 'Mitgliederliste:', 0, 1)
                         pdf.set_font('helvetica', 'B', 9)
@@ -414,16 +470,14 @@ def show():
                 str_alias.error(f"Fehler: {e}")
 
     # ==========================================
-    # 5. ABWESENHEITEN (Neu gemäß Supabase Schema)
+    # 5. ABWESENHEITEN
     # ==========================================
     with tab_abw:
         str_alias.subheader("📅 Abwesenheiten & Urlaub")
         
-        # Formular zum eintragen neuer Abwesenheiten
         with str_alias.form("abwesenheit_form"):
             str_alias.markdown("### Neue Abwesenheit eintragen")
             
-            # Name des Mitglieds ermitteln
             ein_name = ""
             if current_user_id:
                 try:
@@ -434,9 +488,8 @@ def show():
                     pass
             
             if is_admin_or_vorstand:
-                # Admins können für alle oder sich selbst eintragen
                 try:
-                    alle_m = supabase.table("mitglieder").select("id, vorname, nachname").execute().data or []
+                    alle_m = supabase.table("mitglieder").select("id, vorname, nachname").eq("status", "aktiv").execute().data or []
                     m_optionen = {f"{m.get('vorname')} {m.get('nachname')}": m.get('id') for m in alle_m}
                     gew_name = str_alias.selectbox("Mitglied auswählen", list(m_optionen.keys()))
                     final_user_id = m_optionen[gew_name] if gew_name else current_user_id
@@ -447,7 +500,7 @@ def show():
             else:
                 final_user_id = current_user_id or "unbekannt"
                 final_mitglied_name = ein_name or "Mitglied"
-                str_alias.info(getragen_info := f"Eintrag für: **{final_mitglied_name}**")
+                str_alias.info(f"Eintrag für: **{final_mitglied_name}**")
 
             c1, c2 = str_alias.columns(2)
             with c1:
@@ -496,7 +549,6 @@ def show():
             abw_liste = abw_res.data if abw_res.data else []
             
             if abw_liste:
-                # Formatierung für die Anzeige
                 for a in abw_liste:
                     for d_feld in ["von_datum", "bis_datum"]:
                         if a.get(d_feld):
@@ -522,7 +574,6 @@ def show():
                     hide_index=True
                 )
                 
-                # Lösch-Option für Einträge
                 if is_admin_or_vorstand:
                     str_alias.markdown("#### Abwesenheit löschen")
                     loesch_dict = {f"{a.get('mitglied_name', 'Unbekannt')} ({a.get('von_datum')} bis {a.get('bis_datum')} - {a.get('grund')} )": a.get('id') for a in abw_liste}
